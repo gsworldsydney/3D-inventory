@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
@@ -59,8 +59,8 @@
                     <i class="fa-solid fa-plus"></i>
                     <span class="hidden sm:inline" data-i18n="btn_add_rack">Add Rack</span>
                 </button>
-                <!-- 배치 편집 모드 토글 버튼 -->
-                <button id="btn-edit-mode" onclick="toggleEditMode()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg">
+                <!-- 배치 편집 모드 토글 버튼 (관리자 전용) -->
+                <button id="btn-edit-mode" onclick="toggleEditMode()" class="admin-only hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg">
                     <i class="fa-solid fa-up-down-left-right text-amber-400"></i>
                     <span id="edit-mode-text">Layout Edit OFF</span>
                 </button>
@@ -73,10 +73,14 @@
                     <i class="fa-solid fa-compress"></i>
                     <span class="hidden sm:inline" data-i18n="btn_full_view">Full View</span>
                 </button>
+                <button id="btn-floor-plan" onclick="toggleFloorPlanView()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg" title="Switch between 3D View and 2D Floor Plan">
+                    <i class="fa-solid fa-map text-sky-400"></i>
+                    <span id="floor-plan-btn-text" class="hidden sm:inline" data-i18n="btn_floor_plan">Floor Plan</span>
+                </button>
             </div>
 
-            <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 -->
-            <button id="btn-cloud-config" onclick="openSupabaseModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase Real-Time Cloud DB Settings">
+            <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 (Live Sync는 관리자 전용) -->
+            <button id="btn-cloud-config" onclick="openSupabaseModal()" class="admin-only hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase Real-Time Cloud DB Settings">
                 <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>
                 <i class="fa-solid fa-database text-sky-400"></i>
                 <span id="cloud-status-text" class="hidden sm:inline" data-i18n="cloud_disconnected">DB Setup</span>
@@ -87,16 +91,22 @@
                 <span class="hidden sm:inline" data-i18n="btn_cloud_save">Save Cloud</span>
             </button>
 
-            <!-- data.json 내보내기 버튼 (배포/서버용 JSON 파일 저장) -->
-            <button id="btn-save-json" onclick="downloadDataJson()" class="bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download data.json for deployment">
+            <!-- data.json 내보내기 버튼 (관리자 전용) -->
+            <button id="btn-save-json" onclick="downloadDataJson()" class="admin-only hidden bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download data.json for deployment">
                 <i class="fa-solid fa-code"></i>
                 <span class="hidden sm:inline" data-i18n="btn_save_json">Save data.json</span>
             </button>
 
-            <!-- 공유용 HTML 저장 버튼 (현재 배치/재고 포함 파일 다운로드) -->
-            <button id="btn-save-html" onclick="downloadShareableHtml()" class="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download standalone shareable HTML">
+            <!-- 공유용 HTML 저장 버튼 (관리자 전용) -->
+            <button id="btn-save-html" onclick="downloadShareableHtml()" class="admin-only hidden bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download standalone shareable HTML">
                 <i class="fa-solid fa-file-export"></i>
                 <span class="hidden sm:inline" data-i18n="btn_save_html">Save for Share</span>
+            </button>
+
+            <!-- 관리자 모드 잠금 / 해제 버튼 -->
+            <button id="btn-admin-toggle" onclick="onAdminToggleClick()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Admin Mode Login / Lock">
+                <i id="admin-lock-icon" class="fa-solid fa-lock text-slate-400"></i>
+                <span id="admin-lock-text" class="hidden sm:inline" data-i18n="admin_locked">Admin</span>
             </button>
 
             <!-- 오른쪽 상단 한/영 언어 전환 지구본 버튼 -->
@@ -152,7 +162,7 @@
             <div id="layout-editor-panel" class="hidden absolute bottom-16 left-4 bg-slate-900/95 backdrop-blur-md border border-amber-500/50 p-4 rounded-2xl shadow-2xl z-30 w-80 text-xs">
                 <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                     <span class="font-bold text-amber-400 flex items-center gap-1.5">
-                        <i class="fa-solid fa-sliders"></i> <span data-i18n="editor_title">Rack Layout &amp; Tiers</span>
+                        <i class="fa-solid fa-sliders"></i> <span data-i18n="editor_title">Rack Layout &amp; Levels</span>
                     </span>
                     <span id="editor-target-id" class="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-slate-300">-</span>
                 </div>
@@ -186,13 +196,13 @@
                         </div>
                     </div>
 
-                    <!-- 다단(Tier) 추가/삭제 컨트롤 -->
+                    <!-- 다단(Level) 추가/삭제 컨트롤 -->
                     <div class="bg-slate-800/70 border border-slate-700/80 rounded-xl p-2 flex items-center justify-between">
-                        <span class="text-slate-300 font-medium"><i class="fa-solid fa-layer-group text-sky-400 mr-1"></i><span data-i18n="editor_tiers">Rack Tiers</span></span>
+                        <span class="text-slate-300 font-medium"><i class="fa-solid fa-layer-group text-sky-400 mr-1"></i><span data-i18n="editor_tiers">Rack Levels</span></span>
                         <div class="flex items-center gap-1.5">
-                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-rose-500/80 text-white font-bold transition" data-i18n="btn_tier_minus">- Tier</button>
+                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-rose-500/80 text-white font-bold transition" data-i18n="btn_tier_minus">- Level</button>
                             <span id="edit-tier-count" class="font-mono font-bold text-amber-300 px-1.5">L1</span>
-                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-sky-500/80 text-white font-bold transition" data-i18n="btn_tier_plus">+ Tier</button>
+                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-sky-500/80 text-white font-bold transition" data-i18n="btn_tier_plus">+ Level</button>
                         </div>
                     </div>
 
@@ -257,25 +267,25 @@
 
             <!-- 프로파일 리스트 컨테이너 -->
             <div id="profile-list-container" class="flex-1 overflow-y-auto p-5 space-y-4">
-                <!-- 랙 단(Level/Tier) 선택 및 단 추가/삭제 & 품목 추가 컨트롤 바 -->
+                <!-- 랙 단(Level) 선택 및 단 추가/삭제 & 품목 추가 컨트롤 바 -->
                 <div id="rack-tier-selector" class="hidden bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-1.5">
-                            <span class="text-[11px] font-bold text-sky-400"><i class="fa-solid fa-layer-group mr-1"></i><span data-i18n="tier_manage_title">Rack Tiers &amp; Filter</span></span>
-                            <span id="tier-total-badge" class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">5 Tiers</span>
+                            <span class="text-[11px] font-bold text-sky-400"><i class="fa-solid fa-layer-group mr-1"></i><span data-i18n="tier_manage_title">Rack Levels &amp; Filter</span></span>
+                            <span id="tier-total-badge" class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">5 Levels</span>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-500/30 border border-slate-700 hover:border-rose-500/40 text-[11px] text-slate-300 hover:text-rose-300 transition" title="Delete top tier">
-                                <i class="fa-solid fa-minus"></i> <span data-i18n="btn_del_tier">Del Tier</span>
+                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-500/30 border border-slate-700 hover:border-rose-500/40 text-[11px] text-slate-300 hover:text-rose-300 transition" title="Delete top level">
+                                <i class="fa-solid fa-minus"></i> <span data-i18n="btn_del_tier">Del Level</span>
                             </button>
-                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-sky-500/30 border border-slate-700 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-300 transition" title="Add tier on top">
-                                <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_tier">Add Tier</span>
+                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-sky-500/30 border border-slate-700 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-300 transition" title="Add level on top">
+                                <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_tier">Add Level</span>
                             </button>
                         </div>
                     </div>
                     <div id="tier-buttons" class="flex flex-wrap gap-1"></div>
                     <div class="pt-1 border-t border-slate-800/80 flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400" data-i18n="tier_add_item_hint">Add a profile to the selected rack/tier</span>
+                        <span class="text-[11px] text-slate-400" data-i18n="tier_add_item_hint">Add a profile to the selected rack/level</span>
                         <button onclick="openProfileModal('add')" class="px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition flex items-center gap-1 shadow">
                             <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_item">Add Item</span>
                         </button>
@@ -463,6 +473,7 @@
                         <button onclick="setFloorFilter('GROUND')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition">1F</button>
                         <button onclick="setFloorFilter('MEZZANINE')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition">2F</button>
                         <button onclick="resetPreviewCamera()" class="px-2 py-0.5 rounded text-sky-400 hover:bg-slate-800 transition" title="Full Factory View"><i class="fa-solid fa-compress"></i></button>
+                        <button id="inv-btn-floor-plan" onclick="toggleFloorPlanView()" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition" title="Floor Plan View"><i class="fa-solid fa-map"></i></button>
                     </div>
                 </div>
             </div>
@@ -505,7 +516,7 @@
                         <input type="text" id="rack-form-code" placeholder="e.g. C-1F-E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_tiers">Tiers (1~10)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_tiers">Levels (1~10)</label>
                         <input type="number" id="rack-form-tiers" min="1" max="10" value="4" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
@@ -565,7 +576,7 @@
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_tier">Tier</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_tier">Level</label>
                         <select id="profile-form-tier" onchange="onProfileTierSelectChange()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                     <div>
@@ -638,7 +649,7 @@
                         <select id="move-target-rack" onchange="onMoveTargetRackChange()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_tier">Target Tier</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_tier">Target Level</label>
                         <select id="move-target-tier" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                 </div>
@@ -780,6 +791,30 @@
         </div>
     </div>
 
+    <!-- 모달 7: 관리자 인증 모달 -->
+    <div id="admin-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden text-xs">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-amber-400"></i> <span data-i18n="modal_admin_title">Admin Access</span>
+                </h3>
+                <button onclick="closeAdminModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-slate-300 leading-relaxed" data-i18n="modal_admin_desc">Enter the administrator passcode to access Layout Edit, Live Sync, and Export controls.</p>
+                <div>
+                    <input type="password" id="admin-passcode-input" data-i18n-placeholder="modal_admin_ph" placeholder="Enter admin passcode..."
+                        onkeydown="if(event.key==='Enter') submitAdminPasscode()"
+                        class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-mono focus:border-amber-400 focus:outline-none">
+                </div>
+            </div>
+            <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+                <button onclick="closeAdminModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                <button onclick="submitAdminPasscode()" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition" data-i18n="modal_admin_btn">Unlock</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 호버 툴팁 (마우스 따라다니는 미니 정보창 - 3D 지도/인벤토리 프리뷰 공용) -->
     <div id="hover-tooltip" class="hidden fixed pointer-events-none z-40 bg-slate-900/95 border border-sky-400/60 text-white px-3 py-2 rounded-xl shadow-2xl text-xs backdrop-blur-md">
         <div class="font-bold text-sky-400" id="tooltip-title">A-01 Rack</div>
@@ -792,6 +827,6 @@
         <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>

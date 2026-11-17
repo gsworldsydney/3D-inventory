@@ -13,6 +13,14 @@ const DEFAULT_SUPABASE_CONFIG = {
 };
 
 /**
+ * 관리자 전용 모드 설정 (Layout Edit / Live Sync / Save data.json / Save for Share 잠금)
+ * 필요 시 ADMIN_PASSCODE 값을 원하는 관리자 비밀번호로 변경해 배포하세요.
+ */
+const ADMIN_SESSION_KEY = 'smart_factory_admin_v1';
+const ADMIN_PASSCODE = 'admin1234';
+let isAdminMode = sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
+
+/**
  * 1. 실제 공장 도면(Fac C, Fac A, Fac B / Ground(1F) & Mezzanine(2F)) 기반 데이터 모델
  * 명명 규칙: [팩토리구역]-[층수(1F/2F)]-[랙번호] (예: C-1F-A1)
  * tiers 속성이 있는 랙은 3D 상에서 실제 층수(예: 5단)대로 입체 분리되어 렌더링됩니다.
@@ -506,6 +514,7 @@ let selectedBlockId = null;
 let selectedTier = null; // 선택된 특정 단수 (null이면 전체 단 표시)
 let selectedProfileIndex = null; // 선택된 품목 카드 인덱스 (편집/삭제 버튼 표시용)
 let isEditMode = false;
+let isFloorPlanView = false;
 let targetCameraPos = null;
 let targetControlsLookAt = null;
 
@@ -533,6 +542,7 @@ const I18N = {
         nav_inv: '전체 인벤토리',
         btn_add_rack: '랙 추가',
         btn_full_view: '전체 뷰',
+        btn_floor_plan: '평면도',
         search_placeholder: '프로파일 코드 검색 (예: AL-4040)',
         edit_on: '배치 편집 ON',
         edit_off: '배치 편집 OFF',
@@ -558,7 +568,7 @@ const I18N = {
         editor_w: '너비 W',
         editor_d: '깊이 D',
         editor_h: '높이 H',
-        editor_tiers: '랙 단수(Tier)',
+        editor_tiers: '랙 단수(Level)',
         btn_tier_minus: '- 단',
         btn_tier_plus: '+ 단',
         editor_snap: '0.5m 격자 스냅',
@@ -606,7 +616,7 @@ const I18N = {
         modal_rack_fac: '소속 동 (Facility)',
         modal_rack_floor: '층수 (Floor)',
         modal_rack_code: '랙 코드 (ID / 라벨)',
-        modal_rack_tiers: '단수 (Tiers: 1~10)',
+        modal_rack_tiers: '단수 (Levels: 1~10)',
         modal_rack_name: '랙 명칭',
         modal_rack_desc: '상세 설명',
         modal_rack_w: '가로 W (m)',
@@ -615,7 +625,7 @@ const I18N = {
         modal_rack_x: 'X 좌표',
         modal_rack_z: 'Z 좌표',
         modal_prof_rack: '보관 랙 (Rack)',
-        modal_prof_tier: '적재 단수 (Tier)',
+        modal_prof_tier: '적재 단수 (Level)',
         modal_prof_layer: '위치 라벨 (Layer)',
         modal_prof_code: '프로파일 코드 *',
         modal_prof_material: '재질 (Material)',
@@ -626,7 +636,7 @@ const I18N = {
         modal_prof_minqty: '안전재고 기준 (EA)',
         modal_move_title: '보관 위치 이동 / 분할 적재',
         modal_move_rack: '이동할 랙 (Target Rack)',
-        modal_move_tier: '이동할 단수 (Tier)',
+        modal_move_tier: '이동할 단수 (Level)',
         modal_move_qty: '이동 수량 (EA) — 전체 이동 또는 일부 분할 이동',
         btn_move_all: '전량',
         btn_move_exec: '이동 실행',
@@ -672,13 +682,22 @@ const I18N = {
         btn_cloud_pull: '서버 데이터 불러오기',
         btn_cloud_push: '현재 데이터 서버 저장',
         btn_sb_disconnect: '설정 초기화',
-        btn_sb_connect: '연결 저장 & 동기화'
+        btn_sb_connect: '연결 저장 & 동기화',
+        admin_locked: '관리자',
+        admin_unlocked: '관리자 ON',
+        admin_required_msg: '관리자 인증이 필요한 기능입니다.',
+        modal_admin_title: '관리자 권한 인증',
+        modal_admin_desc: 'Layout Edit, Live Sync, Save data.json, Save for Share 기능을 사용하려면 관리자 비밀번호를 입력하세요.',
+        modal_admin_ph: '관리자 비밀번호 입력...',
+        modal_admin_btn: '잠금 해제',
+        admin_wrong_pw: '관리자 비밀번호가 올바르지 않습니다.'
     },
     en: {
         nav_map: '3D Factory Map',
         nav_inv: 'Full Inventory',
         btn_add_rack: 'Add Rack',
         btn_full_view: 'Full View',
+        btn_floor_plan: 'Floor Plan',
         search_placeholder: 'Search profile code (e.g. AL-4040)',
         edit_on: 'Layout Edit ON',
         edit_off: 'Layout Edit OFF',
@@ -698,15 +717,15 @@ const I18N = {
         guide_click: 'Click/Tap: Select Rack',
         guide_pan: 'Drag: Pan Map',
         guide_zoom: 'Wheel/Pinch: Zoom',
-        editor_title: 'Rack Layout & Tiers',
+        editor_title: 'Rack Layout & Levels',
         editor_x: 'X Pos (Left/Right)',
         editor_z: 'Z Pos (Front/Back)',
         editor_w: 'Width W',
         editor_d: 'Depth D',
         editor_h: 'Height H',
-        editor_tiers: 'Rack Tiers',
-        btn_tier_minus: '- Tier',
-        btn_tier_plus: '+ Tier',
+        editor_tiers: 'Rack Levels',
+        btn_tier_minus: '- Level',
+        btn_tier_plus: '+ Level',
         editor_snap: '0.5m Grid Snap',
         editor_autosave: 'Auto-saved',
         btn_new_rack: 'New Rack',
@@ -715,10 +734,10 @@ const I18N = {
         btn_edit_rack: 'Edit Rack',
         panel_select_title: 'Select a Rack',
         panel_select_sub: 'Click a warehouse rack on the 3D map to view its profile inventory.',
-        tier_manage_title: 'Rack Tiers & Filter',
-        btn_del_tier: 'Del Tier',
-        btn_add_tier: 'Add Tier',
-        tier_add_item_hint: 'Add a profile to the selected rack/tier',
+        tier_manage_title: 'Rack Levels & Filter',
+        btn_del_tier: 'Del Level',
+        btn_add_tier: 'Add Level',
+        tier_add_item_hint: 'Add a profile to the selected rack/level',
         btn_add_item: 'Add Item',
         empty_title: 'Select a Rack on the 3D Map',
         empty_desc: 'Click any storage zone to view stored aluminum<br>profile specifications and live quantities.',
@@ -752,7 +771,7 @@ const I18N = {
         modal_rack_fac: 'Facility',
         modal_rack_floor: 'Floor',
         modal_rack_code: 'Rack Code (ID / Label)',
-        modal_rack_tiers: 'Tiers (1~10)',
+        modal_rack_tiers: 'Levels (1~10)',
         modal_rack_name: 'Rack Name',
         modal_rack_desc: 'Description',
         modal_rack_w: 'Width W (m)',
@@ -761,7 +780,7 @@ const I18N = {
         modal_rack_x: 'X Coord',
         modal_rack_z: 'Z Coord',
         modal_prof_rack: 'Storage Rack',
-        modal_prof_tier: 'Tier',
+        modal_prof_tier: 'Level',
         modal_prof_layer: 'Layer Label',
         modal_prof_code: 'Profile Code *',
         modal_prof_material: 'Material',
@@ -772,7 +791,7 @@ const I18N = {
         modal_prof_minqty: 'Safety Stock (EA)',
         modal_move_title: 'Move / Split Stock Location',
         modal_move_rack: 'Target Rack',
-        modal_move_tier: 'Target Tier',
+        modal_move_tier: 'Target Level',
         modal_move_qty: 'Move Qty (EA) — Full or Partial',
         btn_move_all: 'Max',
         btn_move_exec: 'Move Stock',
@@ -788,7 +807,7 @@ const I18N = {
         unit_types: 'types',
         unit_cases: 'items',
         unit_locs: 'locs',
-        single_tier_hint: 'Single-tier zone. Click [+ Add Tier] on the right to convert to multi-tier.',
+        single_tier_hint: 'Single-level zone. Click [+ Add Level] on the right to convert to multi-level.',
         all_locations_btn: 'All Locations',
         btn_excel_export: 'Export Excel',
         btn_excel_import: 'Import Excel',
@@ -818,7 +837,15 @@ const I18N = {
         btn_cloud_pull: 'Pull from Cloud',
         btn_cloud_push: 'Save to Cloud Now',
         btn_sb_disconnect: 'Reset Config',
-        btn_sb_connect: 'Save & Sync'
+        btn_sb_connect: 'Save & Sync',
+        admin_locked: 'Admin',
+        admin_unlocked: 'Admin ON',
+        admin_required_msg: 'Administrator access is required for this control.',
+        modal_admin_title: 'Admin Access',
+        modal_admin_desc: 'Enter the administrator passcode to access Layout Edit, Live Sync, and Export controls.',
+        modal_admin_ph: 'Enter admin passcode...',
+        modal_admin_btn: 'Unlock',
+        admin_wrong_pw: 'Incorrect administrator passcode.'
     }
 };
 
@@ -880,6 +907,12 @@ function applyLanguage() {
     if (typeof updateCloudStatusBadge === 'function') {
         updateCloudStatusBadge();
     }
+    if (typeof applyAdminVisibility === 'function') {
+        applyAdminVisibility();
+    }
+    if (typeof updateFloorPlanButtonUI === 'function') {
+        updateFloorPlanButtonUI();
+    }
 }
 
 // 색상 상수 (도면의 깔끔한 CAD/모던 팩토리 톤 반영)
@@ -890,6 +923,17 @@ const COLORS = {
     wall: 0x334155,      // 건물 외벽 및 격벽
     floorPlate: 0x1e293b // 건물 바닥판
 };
+
+// 2층 Mezzanine을 1층 Ground 뒤쪽(-Z)으로 이동해 1층 랙 클릭 간섭 방지
+const MEZZANINE_Z_OFFSET = -10.5;
+
+function getBlockWorldPos(b) {
+    return {
+        x: b.pos.x,
+        y: b.pos.y,
+        z: b.pos.z + (b.floor === 'MEZZANINE' ? MEZZANINE_Z_OFFSET : 0)
+    };
+}
 
 function init3D() {
     const container = document.getElementById('canvas-container');
@@ -973,6 +1017,7 @@ function init3D() {
     // 층별 그룹 생성
     floorGroups.GROUND = new THREE.Group();
     floorGroups.MEZZANINE = new THREE.Group();
+    floorGroups.MEZZANINE.position.z = MEZZANINE_Z_OFFSET;
     scene.add(floorGroups.GROUND);
     scene.add(floorGroups.MEZZANINE);
 
@@ -989,7 +1034,7 @@ function init3D() {
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
-    // 초기 진입 시 첫 번째 구역(또는 C-1F-A1) 자동 선택
+    // 초기 진입 시 첫 번째 구역(또는 C-1F-A1) 하이라이트
     setTimeout(() => {
         if (factoryBlocksData.length > 0) {
             const defaultBlock = factoryBlocksData.find(b => b.id === "C-1F-A1") || factoryBlocksData[0];
@@ -1004,18 +1049,18 @@ function init3D() {
  * 도면의 3개 동(Fac C, Fac A, Fac B) 건축 구조와 Mezzanine(2층) 구조 생성
  */
 function createFactoryArchitecture() {
-    // 전체 대지 바닥
+    // 전체 대지 바닥 (뒤쪽 Mezzanine 영역 포함 확장)
     const baseGround = new THREE.Mesh(
-        new THREE.PlaneGeometry(72, 46),
+        new THREE.PlaneGeometry(72, 56),
         new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 })
     );
     baseGround.rotation.x = -Math.PI / 2;
-    baseGround.position.set(0, -0.05, 5);
+    baseGround.position.set(0, -0.05, 1);
     baseGround.receiveShadow = true;
     scene.add(baseGround);
 
     const grid = new THREE.GridHelper(72, 36, 0x1e293b, 0x1e293b);
-    grid.position.set(0, -0.02, 5);
+    grid.position.set(0, -0.02, 1);
     scene.add(grid);
 
     // 3개 동 정의 (좌: Fac C, 중: Fac A, 우: Fac B)
@@ -1350,6 +1395,21 @@ function applySelectionHighlight(blockId, tier = null) {
     return selectedGroup;
 }
 
+function syncFloorButtonActiveState(floorMode) {
+    const buttons = document.querySelectorAll('.floor-btn');
+    const modeIndexMap = { ALL: 0, GROUND: 1, MEZZANINE: 2 };
+    const activeIdx = modeIndexMap[floorMode];
+    buttons.forEach((btn, idx) => {
+        if (idx === activeIdx) {
+            btn.classList.add('bg-indigo-500', 'text-white', 'font-bold');
+            btn.classList.remove('text-slate-300', 'font-medium');
+        } else {
+            btn.classList.remove('bg-indigo-500', 'text-white', 'font-bold');
+            btn.classList.add('text-slate-300', 'font-medium');
+        }
+    });
+}
+
 function selectBlock(blockId, moveCamera = true, tier = null) {
     selectedBlockId = blockId;
     selectedTier = tier;
@@ -1357,10 +1417,17 @@ function selectBlock(blockId, moveCamera = true, tier = null) {
     const data = factoryBlocksData.find(b => b.id === blockId);
     if (!data) return;
 
-    if (data.floor === "GROUND" && !floorGroups.GROUND.visible) {
-        setFloorFilter('ALL');
-    } else if (data.floor === "MEZZANINE" && !floorGroups.MEZZANINE.visible) {
-        setFloorFilter('ALL');
+    if (data.floor === "GROUND") {
+        // 1층 선택 시에도 뒤쪽 Mezzanine(2층)은 가리지 않고 유지
+        if (!floorGroups.GROUND.visible) {
+            floorGroups.GROUND.visible = true;
+            syncFloorButtonActiveState(floorGroups.MEZZANINE.visible ? 'ALL' : 'GROUND');
+        }
+    } else if (data.floor === "MEZZANINE") {
+        // 2층 선택 시 아래 Ground(1층)도 유지
+        floorGroups.GROUND.visible = true;
+        floorGroups.MEZZANINE.visible = true;
+        syncFloorButtonActiveState('ALL');
     }
 
     const selectedGroup = applySelectionHighlight(blockId, tier);
@@ -1373,8 +1440,14 @@ function selectBlock(blockId, moveCamera = true, tier = null) {
     }
 
     if (moveCamera && !isEditMode) {
-        targetCameraPos = new THREE.Vector3(data.pos.x, data.pos.y + 18, data.pos.z + 20);
-        targetControlsLookAt = new THREE.Vector3(data.pos.x, data.pos.y + 1, data.pos.z);
+        const wPos = getBlockWorldPos(data);
+        if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(wPos.x, 78, wPos.z + 0.15);
+            targetControlsLookAt = new THREE.Vector3(wPos.x, 0, wPos.z);
+        } else {
+            targetCameraPos = new THREE.Vector3(wPos.x, wPos.y + 18, wPos.z + 20);
+            targetControlsLookAt = new THREE.Vector3(wPos.x, wPos.y + 1, wPos.z);
+        }
     }
 
     renderSidePanel(data, tier);
@@ -1384,6 +1457,7 @@ function selectBlock(blockId, moveCamera = true, tier = null) {
  * 5. 배치 편집 모드(Layout Editor) & 좌표/크기/스냅/초기화 제어 함수들
  */
 function toggleEditMode() {
+    if (!isEditMode && !requireAdminAccess()) return;
     isEditMode = !isEditMode;
     const btn = document.getElementById('btn-edit-mode');
     const btnText = document.getElementById('edit-mode-text');
@@ -1830,7 +1904,9 @@ function renderSidePanel(data, activeTier = null) {
     const tierButtons = document.getElementById('tier-buttons');
     const tierCount = data.tiers || 1;
     tierSelector.classList.remove('hidden');
-    document.getElementById('tier-total-badge').textContent = currentLang === 'en' ? `${tierCount} Tiers` : `총 ${tierCount}단 구조`;
+    document.getElementById('tier-total-badge').textContent = currentLang === 'en'
+        ? `${tierCount} ${tierCount === 1 ? 'Level' : 'Levels'}`
+        : `총 ${tierCount}단 구조`;
     tierButtons.innerHTML = '';
 
     if (tierCount > 1) {
@@ -1870,7 +1946,7 @@ function renderSidePanel(data, activeTier = null) {
     if (indexedProfiles.length === 0) {
         cardsContainer.innerHTML = `
             <div class="p-6 text-center rounded-2xl bg-slate-800/40 border border-slate-800 text-xs text-slate-400 space-y-2">
-                <p>${currentLang === 'en' ? 'No profiles stored in this tier/rack.' : `${activeTier ? `해당 단(${activeTier}단)에는` : '이 랙에는'} 현재 적재된 프로파일이 없습니다.`}</p>
+                <p>${currentLang === 'en' ? 'No profiles stored in this level/rack.' : `${activeTier ? `해당 단(${activeTier}단)에는` : '이 랙에는'} 현재 적재된 프로파일이 없습니다.`}</p>
                 <button onclick="openProfileModal('add')" class="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold transition inline-flex items-center gap-1">
                     <i class="fa-solid fa-plus"></i> ${t('btn_add_item')}
                 </button>
@@ -2376,7 +2452,10 @@ function highlightMultipleTargetsOn3D(targets) {
     });
 
     if (needsGround && floorGroups.GROUND) floorGroups.GROUND.visible = true;
-    if (needsMezzanine && floorGroups.MEZZANINE) floorGroups.MEZZANINE.visible = true;
+    if (needsMezzanine) {
+        if (floorGroups.GROUND) floorGroups.GROUND.visible = true;
+        if (floorGroups.MEZZANINE) floorGroups.MEZZANINE.visible = true;
+    }
 
     interactiveMeshes.forEach(mesh => {
         const bData = mesh.userData.blockData;
@@ -2422,39 +2501,55 @@ function focusCameraOnTargets(targets) {
 
     if (blocks.length === 1) {
         const b = blocks[0];
+        const wPos = getBlockWorldPos(b);
         if (isInvPreview) {
             // 인벤토리 우측 3D 프리뷰에서는 동 전체와 주변 랙이 한눈에 들어오도록 줌아웃
-            const lookX = (b.fac && facCenterMap[b.fac] !== undefined) ? facCenterMap[b.fac] : b.pos.x;
-            const lookZ = 6;
-            const dy = 24 * aspectBoost;
-            const dz = 28 * aspectBoost;
-            targetCameraPos = new THREE.Vector3(lookX, b.pos.y + dy, lookZ + dz);
-            targetControlsLookAt = new THREE.Vector3(lookX, b.pos.y + 1, lookZ);
+            const lookX = (b.fac && facCenterMap[b.fac] !== undefined) ? facCenterMap[b.fac] : wPos.x;
+            const lookZ = 6 + (b.floor === 'MEZZANINE' ? MEZZANINE_Z_OFFSET : 0);
+            if (isFloorPlanView) {
+                const topY = 98 * aspectBoost;
+                targetCameraPos = new THREE.Vector3(lookX, topY, lookZ + 0.15);
+                targetControlsLookAt = new THREE.Vector3(lookX, 0, lookZ);
+            } else {
+                const dy = 24 * aspectBoost;
+                const dz = 28 * aspectBoost;
+                targetCameraPos = new THREE.Vector3(lookX, wPos.y + dy, lookZ + dz);
+                targetControlsLookAt = new THREE.Vector3(lookX, wPos.y + 1, lookZ);
+            }
+        } else if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(wPos.x, 78, wPos.z + 0.15);
+            targetControlsLookAt = new THREE.Vector3(wPos.x, 0, wPos.z);
         } else {
-            targetCameraPos = new THREE.Vector3(b.pos.x, b.pos.y + 18, b.pos.z + 20);
-            targetControlsLookAt = new THREE.Vector3(b.pos.x, b.pos.y + 1, b.pos.z);
+            targetCameraPos = new THREE.Vector3(wPos.x, wPos.y + 18, wPos.z + 20);
+            targetControlsLookAt = new THREE.Vector3(wPos.x, wPos.y + 1, wPos.z);
         }
         return;
     }
 
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
     blocks.forEach(b => {
-        minX = Math.min(minX, b.pos.x);
-        maxX = Math.max(maxX, b.pos.x);
-        minY = Math.min(minY, b.pos.y);
-        maxY = Math.max(maxY, b.pos.y);
-        minZ = Math.min(minZ, b.pos.z);
-        maxZ = Math.max(maxZ, b.pos.z);
+        const wPos = getBlockWorldPos(b);
+        minX = Math.min(minX, wPos.x);
+        maxX = Math.max(maxX, wPos.x);
+        minY = Math.min(minY, wPos.y);
+        maxY = Math.max(maxY, wPos.y);
+        minZ = Math.min(minZ, wPos.z);
+        maxZ = Math.max(maxZ, wPos.z);
     });
 
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const cz = (minZ + maxZ) / 2;
     const span = Math.max(maxX - minX, maxZ - minZ, 14);
-    const dist = Math.min(72, Math.max(32, span * 1.35 * aspectBoost));
-
-    targetCameraPos = new THREE.Vector3(cx, cy + dist * 0.88, cz + dist);
-    targetControlsLookAt = new THREE.Vector3(cx, cy + 1, cz);
+    if (isFloorPlanView) {
+        const topDist = Math.min(185, Math.max(92, span * 2.4 * aspectBoost));
+        targetCameraPos = new THREE.Vector3(cx, topDist, cz + 0.15);
+        targetControlsLookAt = new THREE.Vector3(cx, 0, cz);
+    } else {
+        const dist = Math.min(72, Math.max(32, span * 1.35 * aspectBoost));
+        targetCameraPos = new THREE.Vector3(cx, cy + dist * 0.88, cz + dist);
+        targetControlsLookAt = new THREE.Vector3(cx, cy + 1, cz);
+    }
 }
 
 function previewProfileOn3D(normKey, focusBlockId = null, focusTier = null) {
@@ -2524,8 +2619,13 @@ function previewSingleRackInInventory(blockId, tier = null) {
 }
 
 function resetPreviewCamera() {
-    targetCameraPos = new THREE.Vector3(0, 38, 44);
-    targetControlsLookAt = new THREE.Vector3(0, 1, 5);
+    if (isFloorPlanView) {
+        targetCameraPos = new THREE.Vector3(0, 128, 2.15);
+        targetControlsLookAt = new THREE.Vector3(0, 0, 2);
+    } else {
+        targetCameraPos = new THREE.Vector3(0, 38, 44);
+        targetControlsLookAt = new THREE.Vector3(0, 1, 5);
+    }
 }
 
 function openPreviewInFullMap() {
@@ -3267,18 +3367,79 @@ function focusZone(zone, btnEl) {
     }
 
     if (zone === 'ALL') {
+        if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(0, 128, 2.15);
+            targetControlsLookAt = new THREE.Vector3(0, 0, 2);
+        } else {
+            targetCameraPos = new THREE.Vector3(0, 38, 44);
+            targetControlsLookAt = new THREE.Vector3(0, 1, 5);
+        }
+    } else if (zone === 'C') {
+        if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(-18.5, 86, 2.15);
+            targetControlsLookAt = new THREE.Vector3(-18.5, 0, 2);
+        } else {
+            targetCameraPos = new THREE.Vector3(-18.5, 24, 26);
+            targetControlsLookAt = new THREE.Vector3(-18.5, 1, 6);
+        }
+    } else if (zone === 'A') {
+        if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(-1.5, 86, 2.15);
+            targetControlsLookAt = new THREE.Vector3(-1.5, 0, 2);
+        } else {
+            targetCameraPos = new THREE.Vector3(-1.5, 24, 26);
+            targetControlsLookAt = new THREE.Vector3(-1.5, 1, 6);
+        }
+    } else if (zone === 'B') {
+        if (isFloorPlanView) {
+            targetCameraPos = new THREE.Vector3(17.5, 86, 2.15);
+            targetControlsLookAt = new THREE.Vector3(17.5, 0, 2);
+        } else {
+            targetCameraPos = new THREE.Vector3(17.5, 24, 26);
+            targetControlsLookAt = new THREE.Vector3(17.5, 1, 6);
+        }
+    }
+}
+
+function updateFloorPlanButtonUI() {
+    const mainBtn = document.getElementById('btn-floor-plan');
+    const invBtn = document.getElementById('inv-btn-floor-plan');
+    if (mainBtn) {
+        mainBtn.className = isFloorPlanView
+            ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400 text-sky-300 px-3 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-lg'
+            : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg';
+    }
+    if (invBtn) {
+        invBtn.className = isFloorPlanView
+            ? 'px-2 py-0.5 rounded bg-sky-500/25 text-sky-300 font-bold transition'
+            : 'px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition';
+    }
+}
+
+function toggleFloorPlanView() {
+    isFloorPlanView = !isFloorPlanView;
+    const curX = controls ? controls.target.x : 0;
+    const curZ = controls ? controls.target.z : 2;
+
+    if (isFloorPlanView) {
+        camera.fov = 22;
+        camera.updateProjectionMatrix();
+        controls.minPolarAngle = 0;
+        controls.minDistance = 20;
+        controls.maxDistance = 220;
+        targetCameraPos = new THREE.Vector3(curX, 128, curZ + 0.15);
+        targetControlsLookAt = new THREE.Vector3(curX, 0, curZ);
+        showToast(currentLang === 'en' ? 'Switched to 2D Floor Plan View.' : '평면도(Floor Plan) 뷰로 전환되었습니다.');
+    } else {
+        camera.fov = 42;
+        camera.updateProjectionMatrix();
+        controls.minDistance = 10;
+        controls.maxDistance = 95;
         targetCameraPos = new THREE.Vector3(0, 38, 44);
         targetControlsLookAt = new THREE.Vector3(0, 1, 5);
-    } else if (zone === 'C') {
-        targetCameraPos = new THREE.Vector3(-18.5, 24, 26);
-        targetControlsLookAt = new THREE.Vector3(-18.5, 1, 6);
-    } else if (zone === 'A') {
-        targetCameraPos = new THREE.Vector3(-1.5, 24, 26);
-        targetControlsLookAt = new THREE.Vector3(-1.5, 1, 6);
-    } else if (zone === 'B') {
-        targetCameraPos = new THREE.Vector3(17.5, 24, 26);
-        targetControlsLookAt = new THREE.Vector3(17.5, 1, 6);
+        showToast(currentLang === 'en' ? 'Switched back to 3D View.' : '3D 입체 뷰로 전환되었습니다.');
     }
+    updateFloorPlanButtonUI();
 }
 
 function setFloorFilter(floorMode, btnEl) {
@@ -3308,9 +3469,14 @@ function setFloorFilter(floorMode, btnEl) {
 
 // 전체 뷰 버튼 이벤트
 document.getElementById('btn-reset-cam').addEventListener('click', () => {
-    targetCameraPos = new THREE.Vector3(0, 38, 44);
-    targetControlsLookAt = new THREE.Vector3(0, 1, 5);
-    showToast("전체 공장 뷰로 초기화되었습니다.");
+    if (isFloorPlanView) {
+        targetCameraPos = new THREE.Vector3(0, 128, 2.15);
+        targetControlsLookAt = new THREE.Vector3(0, 0, 2);
+    } else {
+        targetCameraPos = new THREE.Vector3(0, 38, 44);
+        targetControlsLookAt = new THREE.Vector3(0, 1, 5);
+    }
+    showToast(currentLang === 'en' ? 'Reset to full factory view.' : '전체 공장 뷰로 초기화되었습니다.');
 });
 
 // 프로파일 코드 검색 기능 (예: A-EXT-WA-00-01, AL-4040 등)
@@ -3386,6 +3552,7 @@ function capturePristineHtmlSnapshot() {
 }
 
 async function downloadShareableHtml() {
+    if (!requireAdminAccess()) return;
     if (!PRISTINE_HTML_SNAPSHOT) {
         showToast(currentLang === 'en' ? 'Snapshot is not ready yet.' : 'HTML 스냅샷이 아직 준비되지 않았습니다.');
         return;
@@ -3468,6 +3635,7 @@ async function downloadShareableHtml() {
 }
 
 function downloadDataJson() {
+    if (!requireAdminAccess()) return;
     const payload = {
         revision: Date.now(),
         updatedAt: new Date().toISOString(),
@@ -3669,6 +3837,12 @@ function updateCloudStatusBadge() {
 
     if (modalLastSync) {
         modalLastSync.textContent = lastCloudSyncAt ? new Date(lastCloudSyncAt).toLocaleTimeString() : '-';
+    }
+    if (typeof applyAdminVisibility === 'function') {
+        applyAdminVisibility();
+    }
+    if (typeof updateFloorPlanButtonUI === 'function') {
+        updateFloorPlanButtonUI();
     }
 }
 
@@ -4122,6 +4296,7 @@ function pullFromSupabaseManual() {
 }
 
 function openSupabaseModal() {
+    if (!requireAdminAccess()) return;
     const cfg = getSupabaseConfig();
     document.getElementById('sb-form-url').value = cfg.url;
     document.getElementById('sb-form-key').value = cfg.anonKey;
@@ -4234,6 +4409,111 @@ function copySupabaseSql() {
     }
 }
 
+/**
+ * 10. 관리자 전용 컨트롤(Layout Edit / Live Sync / Save data.json / Save for Share) 제어
+ */
+function applyAdminVisibility() {
+    document.querySelectorAll('.admin-only').forEach(el => {
+        el.classList.toggle('hidden', !isAdminMode);
+    });
+
+    const toggleBtn = document.getElementById('btn-admin-toggle');
+    const lockIcon = document.getElementById('admin-lock-icon');
+    const lockText = document.getElementById('admin-lock-text');
+
+    if (toggleBtn && lockIcon && lockText) {
+        if (isAdminMode) {
+            toggleBtn.className = 'bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            lockIcon.className = 'fa-solid fa-lock-open text-amber-400';
+            lockText.textContent = t('admin_unlocked');
+        } else {
+            toggleBtn.className = 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            lockIcon.className = 'fa-solid fa-lock text-slate-400';
+            lockText.textContent = t('admin_locked');
+        }
+    }
+}
+
+function requireAdminAccess() {
+    if (isAdminMode) return true;
+    showToast(t('admin_required_msg'));
+    openAdminModal();
+    return false;
+}
+
+function onAdminToggleClick() {
+    if (isAdminMode) {
+        lockAdminMode();
+    } else {
+        openAdminModal();
+    }
+}
+
+function openAdminModal() {
+    const input = document.getElementById('admin-passcode-input');
+    if (input) input.value = '';
+    document.getElementById('admin-modal').classList.remove('hidden');
+    setTimeout(() => {
+        if (input) input.focus();
+    }, 50);
+}
+
+function closeAdminModal() {
+    document.getElementById('admin-modal').classList.add('hidden');
+}
+
+function submitAdminPasscode() {
+    const input = document.getElementById('admin-passcode-input');
+    const entered = input ? input.value : '';
+    if (entered === ADMIN_PASSCODE) {
+        isAdminMode = true;
+        sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
+        applyAdminVisibility();
+        closeAdminModal();
+        showToast(currentLang === 'en' ? 'Admin mode unlocked.' : '관리자 모드가 활성화되었습니다.');
+    } else {
+        showToast(t('admin_wrong_pw'));
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+    }
+}
+
+function lockAdminMode() {
+    if (isEditMode) {
+        toggleEditMode();
+    }
+    isAdminMode = false;
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    applyAdminVisibility();
+    showToast(currentLang === 'en' ? 'Admin mode locked.' : '관리자 모드가 잠금 상태로 전환되었습니다.');
+}
+
+// 모달 입력창에서 Enter 키로 Save/확인 실행 (한글 IME 조합 중 및 버튼/텍스트영역 포커스 제외)
+const MODAL_ENTER_SUBMIT_HANDLERS = [
+    ['rack-modal', () => saveRackModal()],
+    ['profile-modal', () => saveProfileModal()],
+    ['move-profile-modal', () => confirmMoveProfile()],
+    ['supabase-modal', () => saveSupabaseConfigAndConnect()],
+    ['confirm-modal', () => document.getElementById('confirm-modal-ok-btn')?.click()]
+];
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+    const tag = e.target?.tagName;
+    if (tag === 'BUTTON' || tag === 'A' || tag === 'TEXTAREA') return;
+
+    const active = MODAL_ENTER_SUBMIT_HANDLERS.find(([id]) => {
+        const modal = document.getElementById(id);
+        return modal && !modal.classList.contains('hidden');
+    });
+    if (!active) return;
+
+    e.preventDefault();
+    active[1]();
+});
+
 // 페이지 로드 완료 시 초기화
 window.onload = async function() {
     capturePristineHtmlSnapshot();
@@ -4241,6 +4521,7 @@ window.onload = async function() {
     await initSupabaseConnection();
     init3D();
     applyLanguage();
+    applyAdminVisibility();
     updateInventoryNavBadge();
     updateCloudStatusBadge();
     if (window.location.hash === '#inventory') {
