@@ -1,8 +1,22 @@
 /**
+ * 0. Supabase 실시간 공유 DB 설정
+ * 모든 컴퓨터에서 별도 설정 없이 바로 동기화하려면 아래 url, anonKey를 입력한 뒤 GitHub에 배포하세요.
+ * 또는 웹 화면 상단 [DB 설정] 버튼에서 직접 입력해 연결/테스트할 수 있습니다.
+ */
+const SUPABASE_CONFIG_STORAGE_KEY = 'smart_factory_supabase_config_v1';
+const DEFAULT_SUPABASE_CONFIG = {
+    url: 'https://lrpmdelrvebjzuqaskni.supabase.co',
+    anonKey: 'sb_publishable_CsNJc1ZebGGAABq7YUL_jA_T3rm6_8K',
+    table: 'factory_inventory_state',
+    rowId: 'main',
+    autoSync: true
+};
+
+/**
  * 1. 실제 공장 도면(Fac C, Fac A, Fac B / Ground(1F) & Mezzanine(2F)) 기반 데이터 모델
  * 명명 규칙: [팩토리구역]-[층수(1F/2F)]-[랙번호] (예: C-1F-A1)
  * tiers 속성이 있는 랙은 3D 상에서 실제 층수(예: 5단)대로 입체 분리되어 렌더링됩니다.
- * localStorage 연동을 통해 새로고침 후에도 배치 위치/사이즈/랙/단수/품목 변경사항이 유지됩니다.
+ * localStorage + Supabase 연동을 통해 새로고침 및 다른 컴퓨터에서도 배치/재고 변경사항이 동기화됩니다.
  */
 const STORAGE_KEY = 'smart_factory_3d_inventory_v1';
 /* __BAKED_DATA_START__ */
@@ -419,7 +433,7 @@ async function loadInitialDataFromJsonOrStorage() {
     }
 }
 
-// localStorage에 현재 데이터 즉시 저장
+// localStorage에 현재 데이터 즉시 저장 (+ Supabase 자동 동기화 예약)
 function saveFactoryData(isUserEdit = true) {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -433,6 +447,9 @@ function saveFactoryData(isUserEdit = true) {
     }
     if (typeof updateInventoryNavBadge === 'function') {
         updateInventoryNavBadge();
+    }
+    if (isUserEdit && !(typeof transformControl !== 'undefined' && transformControl && transformControl.dragging) && typeof scheduleCloudPush === 'function') {
+        scheduleCloudPush();
     }
 }
 
@@ -605,7 +622,25 @@ const I18N = {
         btn_save_html: '공유용 저장',
         btn_save_json: 'data.json 저장',
         btn_json_import: 'JSON 불러오기',
-        btn_sync_json: 'JSON 동기화'
+        btn_sync_json: 'JSON 동기화',
+        cloud_disconnected: 'DB 설정',
+        cloud_connected: '실시간 동기화',
+        cloud_syncing: '저장 중...',
+        cloud_error: 'DB 오류',
+        btn_cloud_save: '서버 저장',
+        modal_sb_title: 'Supabase 실시간 클라우드 동기화',
+        modal_sb_url: 'Supabase Project URL *',
+        modal_sb_key: 'Supabase Anon / Publishable Key *',
+        modal_sb_table: '테이블명 (Table)',
+        modal_sb_rowid: '문서 ID (Row ID)',
+        modal_sb_autosync: '수정 즉시 자동 서버 저장 및 실시간 수신 (Auto-Sync)',
+        modal_sb_sql_title: '1회 초기 테이블 생성 SQL (Supabase SQL Editor)',
+        btn_copy_sql: 'SQL 복사',
+        modal_sb_hint: '모든 컴퓨터에서 별도 입력 없이 바로 연동되게 하려면, app.js 상단의 DEFAULT_SUPABASE_CONFIG에 URL과 Anon Key를 입력해 GitHub에 배포하세요.',
+        btn_cloud_pull: '서버 데이터 불러오기',
+        btn_cloud_push: '현재 데이터 서버 저장',
+        btn_sb_disconnect: '설정 초기화',
+        btn_sb_connect: '연결 저장 & 동기화'
     },
     en: {
         nav_map: '3D Factory Map',
@@ -734,7 +769,25 @@ const I18N = {
         btn_save_html: 'Save for Share',
         btn_save_json: 'Save data.json',
         btn_json_import: 'Import JSON',
-        btn_sync_json: 'Sync JSON'
+        btn_sync_json: 'Sync JSON',
+        cloud_disconnected: 'DB Setup',
+        cloud_connected: 'Live Sync',
+        cloud_syncing: 'Saving...',
+        cloud_error: 'DB Error',
+        btn_cloud_save: 'Save Cloud',
+        modal_sb_title: 'Supabase Real-Time Cloud Sync',
+        modal_sb_url: 'Supabase Project URL *',
+        modal_sb_key: 'Supabase Anon / Publishable Key *',
+        modal_sb_table: 'Table Name',
+        modal_sb_rowid: 'State Row ID',
+        modal_sb_autosync: 'Auto-save edits & receive real-time updates (Auto-Sync)',
+        modal_sb_sql_title: 'One-Time Table Setup SQL (Supabase SQL Editor)',
+        btn_copy_sql: 'Copy SQL',
+        modal_sb_hint: 'To auto-connect every computer without typing credentials, enter URL & Anon Key into DEFAULT_SUPABASE_CONFIG in app.js and deploy to GitHub.',
+        btn_cloud_pull: 'Pull from Cloud',
+        btn_cloud_push: 'Save to Cloud Now',
+        btn_sb_disconnect: 'Reset Config',
+        btn_sb_connect: 'Save & Sync'
     }
 };
 
@@ -791,6 +844,9 @@ function applyLanguage() {
         }
     } else {
         updateInventoryNavBadge();
+    }
+    if (typeof updateCloudStatusBadge === 'function') {
+        updateCloudStatusBadge();
     }
 }
 
@@ -853,7 +909,13 @@ function init3D() {
     transformControl.addEventListener('dragging-changed', (event) => {
         controls.enabled = !event.value;
         if (!event.value) {
-            saveFactoryData();
+            if (typeof pendingRemoteBlocks !== 'undefined' && pendingRemoteBlocks) {
+                const queued = pendingRemoteBlocks;
+                pendingRemoteBlocks = null;
+                applyRemoteBlocksFromCloud(queued, null, true);
+            } else {
+                saveFactoryData();
+            }
         }
     });
     transformControl.addEventListener('objectChange', () => {
@@ -1424,6 +1486,7 @@ function resetToDefaultData() {
             if (factoryBlocksData.length > 0) {
                 selectBlock(factoryBlocksData[0].id, false, null);
             }
+            saveFactoryData(true);
             showToast("모든 데이터가 초기 도면 상태로 복원되었습니다.");
         }
     );
@@ -3464,13 +3527,446 @@ async function reloadFromDataJson() {
     }
 }
 
+/**
+ * 9. Supabase 실시간 클라우드 DB 연동 (Push / Pull / Realtime Sync)
+ */
+let supabaseClient = null;
+let supabaseRealtimeChannel = null;
+let cloudSyncState = 'disconnected'; // 'disconnected' | 'syncing' | 'connected' | 'error'
+let cloudStatusMessage = '';
+let lastCloudSyncAt = null;
+let lastSyncedHash = null;
+let cloudPushTimer = null;
+let pendingRemoteBlocks = null;
+
+function normalizeSupabaseUrl(raw) {
+    if (typeof raw !== 'string') return '';
+    return raw.trim().replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+}
+
+function getSupabaseConfig() {
+    let override = {};
+    try {
+        const raw = localStorage.getItem(SUPABASE_CONFIG_STORAGE_KEY);
+        if (raw) override = JSON.parse(raw) || {};
+    } catch (_) {}
+
+    const cleanStr = (val) => (typeof val === 'string' ? val.trim() : '');
+    return {
+        url: normalizeSupabaseUrl(override.url) || normalizeSupabaseUrl(DEFAULT_SUPABASE_CONFIG.url),
+        anonKey: cleanStr(override.anonKey) || cleanStr(DEFAULT_SUPABASE_CONFIG.anonKey),
+        table: cleanStr(override.table) || cleanStr(DEFAULT_SUPABASE_CONFIG.table) || 'factory_inventory_state',
+        rowId: cleanStr(override.rowId) || cleanStr(DEFAULT_SUPABASE_CONFIG.rowId) || 'main',
+        autoSync: typeof override.autoSync === 'boolean' ? override.autoSync : Boolean(DEFAULT_SUPABASE_CONFIG.autoSync)
+    };
+}
+
+function isSupabaseConfigured() {
+    const cfg = getSupabaseConfig();
+    return Boolean(cfg.url && cfg.anonKey && typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function');
+}
+
+function isSupabaseReady() {
+    return Boolean(supabaseClient && cloudSyncState !== 'disconnected');
+}
+
+function setCloudStatus(state, message = '') {
+    cloudSyncState = state;
+    cloudStatusMessage = message;
+    updateCloudStatusBadge();
+}
+
+function updateCloudStatusBadge() {
+    const btn = document.getElementById('btn-cloud-config');
+    const dot = document.getElementById('cloud-status-dot');
+    const text = document.getElementById('cloud-status-text');
+    const modalDot = document.getElementById('sb-modal-dot');
+    const modalMsg = document.getElementById('sb-modal-status-msg');
+    const modalLastSync = document.getElementById('sb-modal-last-sync');
+
+    if (btn && dot && text) {
+        if (cloudSyncState === 'connected') {
+            btn.className = 'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            dot.className = 'w-2 h-2 rounded-full bg-emerald-400 inline-block';
+            text.textContent = t('cloud_connected');
+        } else if (cloudSyncState === 'syncing') {
+            btn.className = 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            dot.className = 'w-2 h-2 rounded-full bg-sky-400 animate-pulse inline-block';
+            text.textContent = t('cloud_syncing');
+        } else if (cloudSyncState === 'error') {
+            btn.className = 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            dot.className = 'w-2 h-2 rounded-full bg-rose-400 inline-block';
+            text.textContent = t('cloud_error');
+        } else {
+            btn.className = 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg';
+            dot.className = 'w-2 h-2 rounded-full bg-slate-500 inline-block';
+            text.textContent = t('cloud_disconnected');
+        }
+    }
+
+    if (modalDot && modalMsg) {
+        if (cloudSyncState === 'connected') {
+            modalDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0';
+            modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+        } else if (cloudSyncState === 'syncing') {
+            modalDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse shrink-0';
+            modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Syncing with Supabase...' : 'Supabase와 동기화 중...');
+        } else if (cloudSyncState === 'error') {
+            modalDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0';
+            modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Connection failed' : 'Supabase 연결 오류');
+        } else {
+            modalDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500 shrink-0';
+            modalMsg.textContent = currentLang === 'en' ? 'Supabase URL & Anon Key required.' : 'Supabase URL과 Anon Key 설정이 필요합니다.';
+        }
+    }
+
+    if (modalLastSync) {
+        modalLastSync.textContent = lastCloudSyncAt ? new Date(lastCloudSyncAt).toLocaleTimeString() : '-';
+    }
+}
+
+function applyRemoteBlocksFromCloud(remoteBlocks, updatedAt = null, showNotice = false) {
+    if (!Array.isArray(remoteBlocks) || remoteBlocks.length === 0) return;
+
+    const normalized = normalizeBlocksArray(JSON.parse(JSON.stringify(remoteBlocks)));
+    const incomingHash = computeDataHash(normalized);
+    const localHash = computeDataHash(factoryBlocksData);
+
+    lastSyncedHash = incomingHash;
+    currentSourceHash = incomingHash;
+    lastCloudSyncAt = updatedAt || new Date().toISOString();
+
+    if (incomingHash === localHash) {
+        updateCloudStatusBadge();
+        return;
+    }
+
+    factoryBlocksData = normalized;
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            revision: Math.max(DEFAULT_DATA_REVISION, Date.now()),
+            sourceHash: incomingHash,
+            dirty: false,
+            blocks: factoryBlocksData
+        }));
+    } catch (_) {}
+
+    if (typeof scene !== 'undefined' && scene) {
+        rebuildAllBlocks3D();
+        if (factoryBlocksData.length > 0) {
+            if (!factoryBlocksData.some(b => b.id === selectedBlockId)) {
+                selectedBlockId = factoryBlocksData[0].id;
+                selectedTier = null;
+            }
+            const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+            if (activeBlock) {
+                populateEditorInputs(activeBlock);
+                renderSidePanel(activeBlock, selectedTier);
+                applySelectionHighlight(selectedBlockId, selectedTier);
+            }
+        }
+        renderInventoryPage();
+        if (currentPage === 'inventory' && previewedProfileKey) {
+            previewProfileOn3D(previewedProfileKey, previewFocusLocation?.blockId || null, previewFocusLocation?.tier ?? null);
+        }
+        updateInventoryNavBadge();
+    }
+
+    updateCloudStatusBadge();
+    if (showNotice) {
+        showToast(currentLang === 'en'
+            ? 'Synced latest layout & inventory from another device!'
+            : '다른 컴퓨터에서 변경된 최신 레이아웃/재고가 실시간 반영되었습니다!');
+    }
+}
+
+function teardownSupabaseRealtime() {
+    if (supabaseRealtimeChannel && supabaseClient) {
+        try {
+            supabaseClient.removeChannel(supabaseRealtimeChannel);
+        } catch (_) {}
+    }
+    supabaseRealtimeChannel = null;
+}
+
+function subscribeSupabaseRealtime() {
+    teardownSupabaseRealtime();
+    if (!supabaseClient) return;
+    const cfg = getSupabaseConfig();
+
+    supabaseRealtimeChannel = supabaseClient
+        .channel(`factory-sync-${cfg.table}-${cfg.rowId}`)
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: cfg.table, filter: `id=eq.${cfg.rowId}` },
+            (payload) => {
+                if (!getSupabaseConfig().autoSync) return;
+                const row = payload && payload.new;
+                if (!row || !Array.isArray(row.blocks) || row.blocks.length === 0) return;
+
+                const incomingHash = computeDataHash(row.blocks);
+                if (incomingHash === computeDataHash(factoryBlocksData)) return;
+
+                if (typeof transformControl !== 'undefined' && transformControl && transformControl.dragging) {
+                    pendingRemoteBlocks = row.blocks;
+                    return;
+                }
+                applyRemoteBlocksFromCloud(row.blocks, row.updated_at, true);
+            }
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                setCloudStatus('connected', currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+            }
+        });
+}
+
+async function initSupabaseConnection() {
+    teardownSupabaseRealtime();
+    supabaseClient = null;
+
+    if (!isSupabaseConfigured()) {
+        setCloudStatus('disconnected', '');
+        return false;
+    }
+
+    const cfg = getSupabaseConfig();
+    try {
+        setCloudStatus('syncing', currentLang === 'en' ? 'Connecting to Supabase...' : 'Supabase 연결 중...');
+        supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+
+        const { data, error } = await supabaseClient
+            .from(cfg.table)
+            .select('id, revision, blocks, updated_at')
+            .eq('id', cfg.rowId)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data && Array.isArray(data.blocks) && data.blocks.length > 0) {
+            applyRemoteBlocksFromCloud(data.blocks, data.updated_at, false);
+        } else {
+            // Supabase 테이블에 초기 행이 없으면 현재 데이터(data.json / 기본값)를 자동 시딩
+            const ok = await pushDataToSupabase({ silent: true });
+            if (!ok) return false;
+        }
+
+        subscribeSupabaseRealtime();
+        setCloudStatus('connected', currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+        return true;
+    } catch (err) {
+        console.error('Supabase init error:', err);
+        setCloudStatus('error', err.message || 'Connection error');
+        return false;
+    }
+}
+
+function scheduleCloudPush() {
+    if (!isSupabaseConfigured()) return;
+    const cfg = getSupabaseConfig();
+    if (!cfg.autoSync) return;
+
+    if (cloudPushTimer) clearTimeout(cloudPushTimer);
+    setCloudStatus('syncing', currentLang === 'en' ? 'Saving to Supabase...' : 'Supabase에 저장 중...');
+    cloudPushTimer = setTimeout(() => {
+        cloudPushTimer = null;
+        pushDataToSupabase({ silent: true });
+    }, 800);
+}
+
+async function pushDataToSupabase({ silent = false } = {}) {
+    if (!isSupabaseConfigured()) {
+        if (!silent) openSupabaseModal();
+        return false;
+    }
+    const cfg = getSupabaseConfig();
+    if (!supabaseClient) {
+        supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+    }
+
+    try {
+        setCloudStatus('syncing', currentLang === 'en' ? 'Uploading to Supabase...' : 'Supabase 서버에 저장 중...');
+        const payload = {
+            id: cfg.rowId,
+            revision: Date.now(),
+            blocks: factoryBlocksData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { error } = await supabaseClient
+            .from(cfg.table)
+            .upsert(payload, { onConflict: 'id' });
+
+        if (error) throw error;
+
+        lastSyncedHash = computeDataHash(factoryBlocksData);
+        currentSourceHash = lastSyncedHash;
+        lastCloudSyncAt = payload.updated_at;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            revision: DEFAULT_DATA_REVISION,
+            sourceHash: lastSyncedHash,
+            dirty: false,
+            blocks: factoryBlocksData
+        }));
+
+        if (!supabaseRealtimeChannel) {
+            subscribeSupabaseRealtime();
+        }
+        setCloudStatus('connected', currentLang === 'en' ? 'Saved to Supabase!' : 'Supabase 서버에 저장 완료');
+        if (!silent) {
+            showToast(currentLang === 'en'
+                ? 'Saved to Supabase! Other devices will reflect this immediately.'
+                : 'Supabase 서버에 저장되었습니다! 다른 컴퓨터에서도 바로 반영됩니다.');
+        }
+        return true;
+    } catch (err) {
+        console.error('Supabase push error:', err);
+        setCloudStatus('error', err.message || 'Save failed');
+        if (!silent) {
+            showToast((currentLang === 'en' ? 'Supabase save failed: ' : '서버 저장 실패: ') + (err.message || 'Error'));
+        }
+        return false;
+    }
+}
+
+async function pullDataFromSupabase({ silent = false } = {}) {
+    if (!isSupabaseConfigured()) {
+        if (!silent) openSupabaseModal();
+        return false;
+    }
+    const cfg = getSupabaseConfig();
+    if (!supabaseClient) {
+        supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
+    }
+
+    try {
+        setCloudStatus('syncing', currentLang === 'en' ? 'Fetching from Supabase...' : '서버 데이터 불러오는 중...');
+        const { data, error } = await supabaseClient
+            .from(cfg.table)
+            .select('id, revision, blocks, updated_at')
+            .eq('id', cfg.rowId)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data || !Array.isArray(data.blocks) || data.blocks.length === 0) {
+            setCloudStatus('connected', currentLang === 'en' ? 'No remote data yet.' : '서버에 저장된 데이터가 아직 없습니다.');
+            if (!silent) {
+                showToast(currentLang === 'en' ? 'No saved data on Supabase yet.' : '서버에 저장된 데이터가 아직 없습니다.');
+            }
+            return false;
+        }
+
+        applyRemoteBlocksFromCloud(data.blocks, data.updated_at, false);
+        setCloudStatus('connected', currentLang === 'en' ? 'Synced from Supabase' : '서버 데이터 동기화 완료');
+        if (!silent) {
+            showToast(currentLang === 'en' ? 'Loaded latest layout & inventory from Supabase!' : 'Supabase에서 최신 레이아웃과 재고를 불러왔습니다!');
+        }
+        return true;
+    } catch (err) {
+        console.error('Supabase pull error:', err);
+        setCloudStatus('error', err.message || 'Fetch failed');
+        if (!silent) {
+            showToast((currentLang === 'en' ? 'Supabase load failed: ' : '서버 불러오기 실패: ') + (err.message || 'Error'));
+        }
+        return false;
+    }
+}
+
+function pushToSupabaseManual() {
+    if (cloudPushTimer) {
+        clearTimeout(cloudPushTimer);
+        cloudPushTimer = null;
+    }
+    pushDataToSupabase({ silent: false });
+}
+
+function pullFromSupabaseManual() {
+    pullDataFromSupabase({ silent: false });
+}
+
+function openSupabaseModal() {
+    const cfg = getSupabaseConfig();
+    document.getElementById('sb-form-url').value = cfg.url;
+    document.getElementById('sb-form-key').value = cfg.anonKey;
+    document.getElementById('sb-form-table').value = cfg.table;
+    document.getElementById('sb-form-rowid').value = cfg.rowId;
+    document.getElementById('sb-form-autosync').checked = cfg.autoSync;
+    updateCloudStatusBadge();
+    document.getElementById('supabase-modal').classList.remove('hidden');
+}
+
+function closeSupabaseModal() {
+    document.getElementById('supabase-modal').classList.add('hidden');
+}
+
+async function saveSupabaseConfigAndConnect() {
+    const url = normalizeSupabaseUrl(document.getElementById('sb-form-url').value);
+    const anonKey = document.getElementById('sb-form-key').value.trim();
+    const table = document.getElementById('sb-form-table').value.trim() || 'factory_inventory_state';
+    const rowId = document.getElementById('sb-form-rowid').value.trim() || 'main';
+    const autoSync = document.getElementById('sb-form-autosync').checked;
+
+    if (!url || !anonKey) {
+        showToast(currentLang === 'en' ? 'Please enter both Supabase URL and Anon Key.' : 'Supabase URL과 Anon Key를 모두 입력해주세요.');
+        return;
+    }
+
+    localStorage.setItem(SUPABASE_CONFIG_STORAGE_KEY, JSON.stringify({ url, anonKey, table, rowId, autoSync }));
+    const ok = await initSupabaseConnection();
+    if (ok) {
+        showToast(currentLang === 'en' ? 'Supabase connected & synced!' : 'Supabase 연결 및 동기화가 완료되었습니다!');
+        closeSupabaseModal();
+    } else {
+        showToast(currentLang === 'en' ? 'Failed to connect. Check URL/Key or run SQL setup.' : '연결 실패: URL/Key 또는 테이블 SQL 설정을 확인해주세요.');
+    }
+}
+
+function clearSupabaseOverrideConfig() {
+    localStorage.removeItem(SUPABASE_CONFIG_STORAGE_KEY);
+    teardownSupabaseRealtime();
+    supabaseClient = null;
+    initSupabaseConnection();
+    openSupabaseModal();
+    showToast(currentLang === 'en' ? 'Supabase browser settings cleared.' : '브라우저에 저장된 DB 설정을 초기화했습니다.');
+}
+
+function copySupabaseSql() {
+    const table = (document.getElementById('sb-form-table').value.trim() || 'factory_inventory_state').replace(/[^a-zA-Z0-9_]/g, '');
+    const sql = [
+        `create table if not exists public.${table} (`,
+        `  id text primary key,`,
+        `  revision bigint not null default 1,`,
+        `  blocks jsonb not null default '[]'::jsonb,`,
+        `  updated_at timestamptz not null default now()`,
+        `);`,
+        ``,
+        `alter table public.${table} enable row level security;`,
+        ``,
+        `create policy "Allow public read" on public.${table} for select using (true);`,
+        `create policy "Allow public insert" on public.${table} for insert with check (true);`,
+        `create policy "Allow public update" on public.${table} for update using (true);`,
+        ``,
+        `alter publication supabase_realtime add table public.${table};`
+    ].join('\n');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(sql).then(() => {
+            showToast(currentLang === 'en' ? 'Copied Supabase SQL to clipboard!' : 'Supabase 테이블 생성 SQL이 클립보드에 복사되었습니다!');
+        }).catch(() => {
+            showToast(currentLang === 'en' ? 'Clipboard copy failed.' : '클립보드 복사에 실패했습니다.');
+        });
+    }
+}
+
 // 페이지 로드 완료 시 초기화
 window.onload = async function() {
     capturePristineHtmlSnapshot();
     await loadInitialDataFromJsonOrStorage();
+    await initSupabaseConnection();
     init3D();
     applyLanguage();
     updateInventoryNavBadge();
+    updateCloudStatusBadge();
     if (window.location.hash === '#inventory') {
         switchPage('inventory');
     }

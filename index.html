@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- SheetJS (Excel Import / Export) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
@@ -72,6 +74,18 @@
                     <span class="hidden sm:inline" data-i18n="btn_full_view">전체 뷰</span>
                 </button>
             </div>
+
+            <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 -->
+            <button id="btn-cloud-config" onclick="openSupabaseModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase 실시간 클라우드 DB 연동 설정">
+                <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>
+                <i class="fa-solid fa-database text-sky-400"></i>
+                <span id="cloud-status-text" class="hidden sm:inline" data-i18n="cloud_disconnected">DB 설정</span>
+            </button>
+
+            <button id="btn-cloud-push" onclick="pushToSupabaseManual()" class="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="현재 레이아웃 및 재고 변경사항을 Supabase 서버에 즉시 저장">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span class="hidden sm:inline" data-i18n="btn_cloud_save">서버 저장</span>
+            </button>
 
             <!-- data.json 내보내기 버튼 (배포/서버용 JSON 파일 저장) -->
             <button id="btn-save-json" onclick="downloadDataJson()" class="bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="배포용 data.json 파일 다운로드">
@@ -691,6 +705,79 @@
             <div class="px-5 py-3 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
                 <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
                 <button id="confirm-modal-ok-btn" class="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold transition" data-i18n="btn_confirm">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 6: Supabase 실시간 클라우드 DB 설정 모달 -->
+    <div id="supabase-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-xs">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-database text-emerald-400"></i> <span data-i18n="modal_sb_title">Supabase 실시간 클라우드 동기화</span>
+                </h3>
+                <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-3.5 max-h-[75vh] overflow-y-auto">
+                <div id="sb-modal-status-box" class="bg-slate-800/70 border border-slate-700 rounded-xl p-3 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span id="sb-modal-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500 shrink-0"></span>
+                        <span id="sb-modal-status-msg" class="text-slate-200 font-medium truncate">연결 설정이 필요합니다.</span>
+                    </div>
+                    <span id="sb-modal-last-sync" class="text-[11px] text-slate-400 font-mono shrink-0">-</span>
+                </div>
+
+                <div>
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_sb_url">Supabase Project URL *</label>
+                    <input type="text" id="sb-form-url" placeholder="https://xxxxxxxxxxxx.supabase.co" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_sb_key">Supabase Anon / Publishable Key *</label>
+                    <input type="password" id="sb-form-key" placeholder="eyJhbGci... 또는 sb_publishable_..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_sb_table">테이블명 (Table)</label>
+                        <input type="text" id="sb-form-table" value="factory_inventory_state" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_sb_rowid">문서 ID (Row ID)</label>
+                        <input type="text" id="sb-form-rowid" value="main" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                    </div>
+                </div>
+
+                <label class="flex items-center justify-between bg-slate-800/50 border border-slate-700/80 rounded-xl px-3 py-2.5 cursor-pointer">
+                    <span class="text-slate-200 font-medium" data-i18n="modal_sb_autosync">수정 즉시 자동 서버 저장 및 실시간 수신 (Auto-Sync)</span>
+                    <input type="checkbox" id="sb-form-autosync" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0">
+                </label>
+
+                <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2 text-[11px] text-slate-300">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-bold text-sky-400"><i class="fa-solid fa-terminal mr-1"></i><span data-i18n="modal_sb_sql_title">1회 초기 테이블 생성 SQL (Supabase SQL Editor)</span></span>
+                        <button onclick="copySupabaseSql()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold transition shrink-0">
+                            <i class="fa-solid fa-copy mr-1"></i><span data-i18n="btn_copy_sql">SQL 복사</span>
+                        </button>
+                    </div>
+                    <p class="text-slate-400 leading-relaxed" data-i18n="modal_sb_hint">모든 컴퓨터에서 별도 입력 없이 바로 연동되게 하려면, <code>app.js</code> 상단의 <code>DEFAULT_SUPABASE_CONFIG</code>에 URL과 Anon Key를 입력해 GitHub에 배포하세요.</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="pullFromSupabaseManual()" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-cloud-arrow-down text-sky-400"></i> <span data-i18n="btn_cloud_pull">서버 데이터 불러오기</span>
+                    </button>
+                    <button onclick="pushToSupabaseManual()" class="py-2 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="btn_cloud_push">현재 데이터 서버 저장</span>
+                    </button>
+                </div>
+            </div>
+            <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between gap-2">
+                <button onclick="clearSupabaseOverrideConfig()" class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-medium transition" data-i18n="btn_sb_disconnect">설정 초기화</button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeSupabaseModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
+                    <button onclick="saveSupabaseConfigAndConnect()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition" data-i18n="btn_sb_connect">연결 저장 &amp; 동기화</button>
+                </div>
             </div>
         </div>
     </div>
