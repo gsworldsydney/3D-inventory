@@ -1,0 +1,322 @@
+{
+  "revision": 1,
+  "updatedAt": "2026-11-17T00:00:00.000Z",
+  "blocks": [
+    {
+      "id": "C-1F-A1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-A1",
+      "name": "C-1F-A1 (메인 5단 프로파일 랙)",
+      "desc": "Fac C 구역 • 1F 층 • A1 랙 (총 5단 분리 적재 구조)",
+      "pos": { "x": -24.5, "y": 0, "z": 4 },
+      "size": { "w": 1.8, "h": 3.5, "d": 12 },
+      "status": "normal",
+      "tiers": 5,
+      "profiles": [
+        { "tier": 1, "code": "A-EXT-WA-00-01", "name": "고강도 메인 프레임 프로파일 (특수)", "length": "6000mm", "color": "실버", "qty": 180, "minQty": 50, "layer": "1단 (하단)", "material": "A6063-T6" },
+        { "tier": 1, "code": "AL-8080-BASE", "name": "베이스 전용 중량 프로파일 80x80", "length": "6000mm", "color": "실버", "qty": 95, "minQty": 30, "layer": "1단 (하단)", "material": "A6063-T6" },
+        { "tier": 2, "code": "AL-4080-H", "name": "고강도 직사각 프로파일 40x80", "length": "6000mm", "color": "실버", "qty": 210, "minQty": 60, "layer": "2단", "material": "A6063-T6" },
+        { "tier": 2, "code": "AL-4040-H", "name": "고강도 표준 프로파일 40x40", "length": "6000mm", "color": "실버", "qty": 320, "minQty": 100, "layer": "2단", "material": "A6063-T6" },
+        { "tier": 3, "code": "AL-4040-EXT", "name": "외장 마감용 알루미늄 프로파일 40x40", "length": "6000mm", "color": "아노다이징", "qty": 240, "minQty": 80, "layer": "3단 (중단)", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-4545-S", "name": "표준 프로파일 45x45 (슬롯 10mm)", "length": "6000mm", "color": "실버", "qty": 150, "minQty": 50, "layer": "3단 (중단)", "material": "A6063-T5" },
+        { "tier": 4, "code": "AL-3060-S", "name": "중형 직사각 프로파일 30x60", "length": "4000mm", "color": "실버", "qty": 190, "minQty": 60, "layer": "4단", "material": "A6063-T5" },
+        { "tier": 5, "code": "AL-3030-L", "name": "경량 슬림 프로파일 30x30", "length": "4000mm", "color": "실버", "qty": 410, "minQty": 120, "layer": "5단 (상단)", "material": "A6063-T5" },
+        { "tier": 5, "code": "AL-2040-L", "name": "경량 커버용 프로파일 20x40", "length": "3000mm", "color": "실버", "qty": 280, "minQty": 80, "layer": "5단 (상단)", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-B1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-B1",
+      "name": "C-1F-B1 (표준 4단 프로파일 랙)",
+      "desc": "Fac C 구역 • 1F 층 • B1 랙 (총 4단 분리 적재)",
+      "pos": { "x": -21.5, "y": 0, "z": 2.5 },
+      "size": { "w": 1.6, "h": 2.8, "d": 9 },
+      "status": "normal",
+      "tiers": 4,
+      "profiles": [
+        { "tier": 1, "code": "AL-3030-S", "name": "표준 알루미늄 프로파일 30x30", "length": "4000mm", "color": "실버", "qty": 310, "minQty": 100, "layer": "1단", "material": "A6063-T5" },
+        { "tier": 2, "code": "AL-3030-B", "name": "블랙 아노다이징 30x30", "length": "4000mm", "color": "블랙", "qty": 185, "minQty": 50, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-3060-L", "name": "경량 프로파일 30x60", "length": "4000mm", "color": "실버", "qty": 140, "minQty": 40, "layer": "3단", "material": "A6063-T5" },
+        { "tier": 4, "code": "AL-2020-H", "name": "소형 보강 프로파일 20x20", "length": "3000mm", "color": "실버", "qty": 390, "minQty": 100, "layer": "4단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-C1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-C1",
+      "name": "C-1F-C1 (중형 4단 프로파일 랙)",
+      "desc": "Fac C 구역 • 1F 층 • C1 랙 (총 4단 분리 적재)",
+      "pos": { "x": -18.8, "y": 0, "z": 2.5 },
+      "size": { "w": 1.6, "h": 2.8, "d": 9 },
+      "status": "warning",
+      "tiers": 4,
+      "profiles": [
+        { "tier": 1, "code": "AL-3060-S", "name": "직사각 프로파일 30x60", "length": "4000mm", "color": "실버", "qty": 24, "minQty": 50, "layer": "1단", "material": "A6063-T5" },
+        { "tier": 2, "code": "AL-4040-S", "name": "표준 프로파일 40x40", "length": "4000mm", "color": "실버", "qty": 120, "minQty": 40, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-4040-R", "name": "라운드 엣지 프로파일 40x40R", "length": "4000mm", "color": "실버", "qty": 65, "minQty": 20, "layer": "3단", "material": "A6063-T5" },
+        { "tier": 4, "code": "AL-2040-S", "name": "소형 직사각 프로파일 20x40", "length": "3000mm", "color": "실버", "qty": 210, "minQty": 60, "layer": "4단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-D1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-D1",
+      "name": "C-1F-D1 (경량 3단 프로파일 랙)",
+      "desc": "Fac C 구역 • 1F 층 • D1 랙 (총 3단 분리 적재)",
+      "pos": { "x": -16.3, "y": 0, "z": 3.5 },
+      "size": { "w": 1.4, "h": 2.1, "d": 7 },
+      "status": "normal",
+      "tiers": 3,
+      "profiles": [
+        { "tier": 1, "code": "AL-2020-S", "name": "경량 프로파일 20x20", "length": "3000mm", "color": "실버", "qty": 420, "minQty": 120, "layer": "1단", "material": "A6063-T5" },
+        { "tier": 2, "code": "AL-1515-S", "name": "초경량 프로파일 15x15", "length": "2000mm", "color": "실버", "qty": 350, "minQty": 100, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-COVER-20", "name": "20시리즈 마감 바", "length": "3000mm", "color": "실버", "qty": 500, "minQty": 150, "layer": "3단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-W1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-W1",
+      "name": "C-1F-W1 (전면 야드 W 구역)",
+      "desc": "Fac C 구역 • 1F 층 • W1 야드 적재대",
+      "pos": { "x": -25.8, "y": 0, "z": 14.5 },
+      "size": { "w": 1.8, "h": 1.5, "d": 7.5 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-6060-RAW", "name": "압출 원소재 프로파일 60x60 (미가공)", "length": "6500mm", "color": "실버", "qty": 95, "minQty": 30, "layer": "야드 팔레트", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-X1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-X1",
+      "name": "C-1F-X1 (전면 야드 X 구역)",
+      "desc": "Fac C 구역 • 1F 층 • X1 대형 출하 대기 블록",
+      "pos": { "x": -18.5, "y": 0, "z": 13.5 },
+      "size": { "w": 9.5, "h": 1.6, "d": 3.2 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "PKG-4040-SET", "name": "출하 포장 번들 (40x40 20본입)", "length": "6000mm", "color": "실버", "qty": 48, "minQty": 15, "layer": "지상 적재", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "C-1F-Y1",
+      "fac": "Fac C",
+      "floor": "GROUND",
+      "codeLabel": "C-1F-Y1",
+      "name": "C-1F-Y1 (전면 야드 Y 구역)",
+      "desc": "Fac C 구역 • 1F 층 • Y1 통로 인접 적재 블록",
+      "pos": { "x": -11.5, "y": 0, "z": 14.5 },
+      "size": { "w": 1.8, "h": 1.5, "d": 7.5 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-4080-S", "name": "중량 프레임 프로파일 40x80", "length": "6000mm", "color": "실버", "qty": 76, "minQty": 25, "layer": "야드 랙", "material": "A6063-T6" }
+      ]
+    },
+    {
+      "id": "A-1F-A1",
+      "fac": "Fac A",
+      "floor": "GROUND",
+      "codeLabel": "A-1F-A1",
+      "name": "A-1F-A1 (좌측실 4단 복합 랙)",
+      "desc": "Fac A 구역 • 1F 층 • A1 랙 (총 4단 분리 적재)",
+      "pos": { "x": -4.5, "y": 0, "z": 4 },
+      "size": { "w": 5.5, "h": 2.8, "d": 10 },
+      "status": "normal",
+      "tiers": 4,
+      "profiles": [
+        { "tier": 1, "code": "AL-4040-H", "name": "고강도 프로파일 40x40 (중량형)", "length": "6000mm", "color": "실버", "qty": 510, "minQty": 150, "layer": "1단", "material": "A6063-T6" },
+        { "tier": 2, "code": "AL-4545-S", "name": "표준 프로파일 45x45", "length": "6000mm", "color": "실버", "qty": 290, "minQty": 100, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-4590-H", "name": "직사각 고강도 프로파일 45x90", "length": "6000mm", "color": "실버", "qty": 130, "minQty": 40, "layer": "3단", "material": "A6063-T6" },
+        { "tier": 4, "code": "AL-4040-L", "name": "경량 프로파일 40x40", "length": "6000mm", "color": "실버", "qty": 440, "minQty": 120, "layer": "4단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "A-1F-A2",
+      "fac": "Fac A",
+      "floor": "GROUND",
+      "codeLabel": "A-1F-A2",
+      "name": "A-1F-A2 (우측실 4단 장척 랙)",
+      "desc": "Fac A 구역 • 1F 층 • A2 랙 (6m 장척 전용 4단 랙)",
+      "pos": { "x": 3.5, "y": 0, "z": 3.5 },
+      "size": { "w": 4.5, "h": 2.8, "d": 10 },
+      "status": "warning",
+      "tiers": 4,
+      "profiles": [
+        { "tier": 1, "code": "AL-8080-H", "name": "초고강도 메인 프로파일 80x80", "length": "6000mm", "color": "실버", "qty": 19, "minQty": 35, "layer": "1단", "material": "A6061-T6" },
+        { "tier": 2, "code": "AL-40120-H", "name": "고하중 빔 프로파일 40x120", "length": "6000mm", "color": "실버", "qty": 42, "minQty": 20, "layer": "2단", "material": "A6061-T6" },
+        { "tier": 3, "code": "AL-6060-H", "name": "중량 컬럼 프로파일 60x60", "length": "6000mm", "color": "실버", "qty": 85, "minQty": 30, "layer": "3단", "material": "A6063-T6" },
+        { "tier": 4, "code": "AL-4080-L", "name": "경량 빔 프로파일 40x80", "length": "6000mm", "color": "실버", "qty": 110, "minQty": 30, "layer": "4단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "A-1F-W1",
+      "fac": "Fac A",
+      "floor": "GROUND",
+      "codeLabel": "A-1F-W1",
+      "name": "A-1F-W1 (전면 야드 W 구역)",
+      "desc": "Fac A 구역 • 1F 층 • W1 진입로 적재대",
+      "pos": { "x": -8.8, "y": 0, "z": 14.5 },
+      "size": { "w": 1.8, "h": 1.5, "d": 7.5 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-3030-B", "name": "블랙 아노다이징 프로파일 30x30", "length": "4000mm", "color": "블랙", "qty": 130, "minQty": 40, "layer": "야드 W", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "A-1F-X1",
+      "fac": "Fac A",
+      "floor": "GROUND",
+      "codeLabel": "A-1F-X1",
+      "name": "A-1F-X1 (중앙 메인 적재대 X)",
+      "desc": "Fac A 구역 • 1F 층 • X1 대용량 출고 블록",
+      "pos": { "x": -1.0, "y": 0, "z": 13.5 },
+      "size": { "w": 9.5, "h": 1.7, "d": 3.5 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-4040-S", "name": "표준 알루미늄 프로파일 40x40", "length": "6000mm", "color": "실버", "qty": 680, "minQty": 200, "layer": "중앙 X 블록", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "A-1F-Y1",
+      "fac": "Fac A",
+      "floor": "GROUND",
+      "codeLabel": "A-1F-Y1",
+      "name": "A-1F-Y1 (전면 하단 적재대 Y)",
+      "desc": "Fac A 구역 • 1F 층 • Y1 절단 가공품 보관대",
+      "pos": { "x": -1.5, "y": 0, "z": 17.2 },
+      "size": { "w": 8.8, "h": 1.3, "d": 1.8 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "CUT-4040-1500", "name": "정밀 절단품 40x40 (L=1500mm)", "length": "1500mm", "color": "실버", "qty": 215, "minQty": 50, "layer": "Y 라인", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "B-1F-B1",
+      "fac": "Fac B",
+      "floor": "GROUND",
+      "codeLabel": "B-1F-B1",
+      "name": "B-1F-B1 (초대형 겐트리 3단 랙)",
+      "desc": "Fac B 구역 • 1F 층 • B1 랙 (총 3단 고하중 랙)",
+      "pos": { "x": 18.5, "y": 0, "z": 3.5 },
+      "size": { "w": 8.5, "h": 2.7, "d": 10 },
+      "status": "normal",
+      "tiers": 3,
+      "profiles": [
+        { "tier": 1, "code": "AL-100100-H", "name": "초중량 컬럼 프로파일 100x100", "length": "6000mm", "color": "실버", "qty": 32, "minQty": 10, "layer": "1단 (초중량)", "material": "A6061-T6" },
+        { "tier": 2, "code": "AL-80160-H", "name": "겐트리 메인 빔 프로파일 80x160", "length": "6000mm", "color": "실버", "qty": 54, "minQty": 20, "layer": "2단 (중단)", "material": "A6061-T6" },
+        { "tier": 3, "code": "AL-8080-L", "name": "표준 구조용 프로파일 80x80", "length": "6000mm", "color": "실버", "qty": 75, "minQty": 25, "layer": "3단 (상단)", "material": "A6063-T6" }
+      ]
+    },
+    {
+      "id": "B-1F-W1",
+      "fac": "Fac B",
+      "floor": "GROUND",
+      "codeLabel": "B-1F-W1",
+      "name": "B-1F-W1 (전면 상단 적재대 W)",
+      "desc": "Fac B 구역 • 1F 층 • W1 상하차 대기 블록",
+      "pos": { "x": 16.5, "y": 0, "z": 13.0 },
+      "size": { "w": 9.0, "h": 1.6, "d": 3.0 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-60120-H", "name": "중량 프레임 프로파일 60x120", "length": "6000mm", "color": "실버", "qty": 88, "minQty": 30, "layer": "W 블록", "material": "A6063-T6" }
+      ]
+    },
+    {
+      "id": "B-1F-X1",
+      "fac": "Fac B",
+      "floor": "GROUND",
+      "codeLabel": "B-1F-X1",
+      "name": "B-1F-X1 (전면 중단 적재대 S & X)",
+      "desc": "Fac B 구역 • 1F 층 • X1 특수/표준 번들 라인",
+      "pos": { "x": 17.5, "y": 0, "z": 15.8 },
+      "size": { "w": 8.8, "h": 1.3, "d": 1.6 },
+      "status": "warning",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-CONV-80", "name": "컨베이어 가이드 특수 프로파일", "length": "4000mm", "color": "실버", "qty": 14, "minQty": 30, "layer": "S/X 라인", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "B-1F-Y1",
+      "fac": "Fac B",
+      "floor": "GROUND",
+      "codeLabel": "B-1F-Y1",
+      "name": "B-1F-Y1 (전면 하단 적재대 Y & Z)",
+      "desc": "Fac B 구역 • 1F 층 • Y1 수출/체결키트 적재대",
+      "pos": { "x": 18.2, "y": 0, "z": 17.8 },
+      "size": { "w": 10.2, "h": 1.4, "d": 1.8 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "AL-4040-EXPORT", "name": "수출용 포장 프로파일 40x40", "length": "6000mm", "color": "실버", "qty": 340, "minQty": 100, "layer": "Y 구역", "material": "A6063-T5" },
+        { "tier": 1, "code": "ACC-JOINT-KIT", "name": "대형 프로파일 전용 체결 키트", "length": "-", "color": "-", "qty": 620, "minQty": 200, "layer": "Z 박스", "material": "S45C" }
+      ]
+    },
+    {
+      "id": "C-2F-A1",
+      "fac": "Fac C",
+      "floor": "MEZZANINE",
+      "codeLabel": "C-2F-A1",
+      "name": "C-2F-A1 (2층 경량 4단 프로파일실)",
+      "desc": "Fac C 구역 • 2F(중층) • A1 랙 (총 4단 분리 적재)",
+      "pos": { "x": -20.5, "y": 6.5, "z": 3.5 },
+      "size": { "w": 5.5, "h": 2.4, "d": 10 },
+      "status": "normal",
+      "tiers": 4,
+      "profiles": [
+        { "tier": 1, "code": "AL-2020-B", "name": "블랙 미니 프로파일 20x20", "length": "3000mm", "color": "블랙", "qty": 320, "minQty": 100, "layer": "1단", "material": "A6063-T5" },
+        { "tier": 2, "code": "AL-2020-S", "name": "실버 미니 프로파일 20x20", "length": "3000mm", "color": "실버", "qty": 450, "minQty": 120, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-1515-S", "name": "초경량 미니 프로파일 15x15", "length": "2000mm", "color": "실버", "qty": 540, "minQty": 150, "layer": "3단", "material": "A6063-T5" },
+        { "tier": 4, "code": "AL-1530-S", "name": "초경량 직사각 프로파일 15x30", "length": "2000mm", "color": "실버", "qty": 260, "minQty": 80, "layer": "4단", "material": "A6063-T5" }
+      ]
+    },
+    {
+      "id": "A-2F-A1",
+      "fac": "Fac A",
+      "floor": "MEZZANINE",
+      "codeLabel": "A-2F-A1",
+      "name": "A-2F-A1 (2층 부자재/브라켓실)",
+      "desc": "Fac A 구역 • 2F(중층) • A1 체결 부품 보관 랙",
+      "pos": { "x": -1.5, "y": 6.5, "z": 3.5 },
+      "size": { "w": 12.0, "h": 1.5, "d": 10 },
+      "status": "normal",
+      "tiers": 1,
+      "profiles": [
+        { "tier": 1, "code": "ACC-BRK-40", "name": "다이캐스팅 코너 브라켓 4040", "length": "-", "color": "실버", "qty": 2450, "minQty": 800, "layer": "2층 A존", "material": "ADC12" },
+        { "tier": 1, "code": "ACC-TNUT-M8", "name": "스프링 T-너트 M8 (슬롯 8mm)", "length": "-", "color": "실버", "qty": 4800, "minQty": 1500, "layer": "2층 B존", "material": "S45C" }
+      ]
+    },
+    {
+      "id": "B-2F-A1",
+      "fac": "Fac B",
+      "floor": "MEZZANINE",
+      "codeLabel": "B-2F-A1",
+      "name": "B-2F-A1 (2층 클린룸 특수 3단 랙)",
+      "desc": "Fac B 구역 • 2F(중층) • A1 랙 (총 3단 분리 적재)",
+      "pos": { "x": 18.5, "y": 6.5, "z": 3.5 },
+      "size": { "w": 8.5, "h": 2.2, "d": 10 },
+      "status": "warning",
+      "tiers": 3,
+      "profiles": [
+        { "tier": 1, "code": "AL-4040-FLAT", "name": "클린룸 밀폐형 프로파일 40x40", "length": "4000mm", "color": "실버", "qty": 18, "minQty": 40, "layer": "1단", "material": "A6063-T5" },
+        { "tier": 2, "code": "AL-4080-FLAT", "name": "클린룸 밀폐형 프로파일 40x80", "length": "4000mm", "color": "실버", "qty": 45, "minQty": 20, "layer": "2단", "material": "A6063-T5" },
+        { "tier": 3, "code": "AL-COVER-PVC", "name": "슬롯 마감용 PVC 커버 (그레이)", "length": "2000mm", "color": "그레이", "qty": 850, "minQty": 300, "layer": "3단", "material": "PVC" }
+      ]
+    }
+  ]
+}
