@@ -7,9 +7,9 @@ const SUPABASE_CONFIG_STORAGE_KEY = 'smart_factory_supabase_config_v1';
 const DEFAULT_SUPABASE_CONFIG = {
     url: 'https://lrpmdelrvebjzuqaskni.supabase.co',
     anonKey: 'sb_publishable_CsNJc1ZebGGAABq7YUL_jA_T3rm6_8K',
-    table: 'factory_inventory_state',
-    rowId: 'main',
-    autoSync: true
+    autoSync: true,
+    legacyTable: 'factory_inventory_state',
+    legacyRowId: 'main'
 };
 
 /**
@@ -356,8 +356,41 @@ function normalizeBlocksArray(arr) {
     return arr;
 }
 
+function canonicalizeBlocksForHash(arr) {
+    return (arr || []).map(b => ({
+        id: String(b.id || ''),
+        fac: String(b.fac || ''),
+        floor: String(b.floor || 'GROUND'),
+        codeLabel: String(b.codeLabel || b.id || ''),
+        name: String(b.name || ''),
+        desc: String(b.desc || ''),
+        pos: {
+            x: Number(b.pos && b.pos.x) || 0,
+            y: Number(b.pos && b.pos.y) || 0,
+            z: Number(b.pos && b.pos.z) || 0
+        },
+        size: {
+            w: Number(b.size && b.size.w) || 2,
+            h: Number(b.size && b.size.h) || 2.5,
+            d: Number(b.size && b.size.d) || 8
+        },
+        tiers: Number(b.tiers) || 1,
+        profiles: (Array.isArray(b.profiles) ? b.profiles : []).map(p => ({
+            tier: Number(p.tier) || 1,
+            code: String(p.code || '').trim(),
+            name: String(p.name || '').trim(),
+            length: String((p.length !== undefined ? p.length : getProfileLength(p)) || '-'),
+            color: String((p.color !== undefined ? p.color : getProfileColor(p)) || '-'),
+            qty: Number(p.qty) || 0,
+            minQty: Number(p.minQty) || 0,
+            layer: String(p.layer || ''),
+            material: String(p.material || 'A6063-T5')
+        })).sort((a, c) => (a.tier - c.tier) || a.code.localeCompare(c.code))
+    }));
+}
+
 function computeDataHash(obj) {
-    const str = JSON.stringify(obj || []);
+    const str = JSON.stringify(canonicalizeBlocksForHash(obj));
     let hash = 0x811c9dc5;
     for (let i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);
@@ -476,9 +509,9 @@ let isEditMode = false;
 let targetCameraPos = null;
 let targetControlsLookAt = null;
 
-// 모달 및 페이지/언어 상태 관리용 변수
-const LANG_STORAGE_KEY = 'smart_factory_lang';
-let currentLang = localStorage.getItem(LANG_STORAGE_KEY) === 'en' ? 'en' : 'ko';
+// 모달 및 페이지/언어 상태 관리용 변수 (기본 언어: 영어)
+const LANG_STORAGE_KEY = 'smart_factory_lang_v2';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) === 'ko' ? 'ko' : 'en';
 let currentPage = 'map'; // 'map' | 'inventory'
 let invQuickFilter = 'all'; // 'all' | 'multi' | 'low'
 let invSortKey = 'name'; // 'code' | 'name' | 'length' | 'color' | 'totalQty'
@@ -631,8 +664,7 @@ const I18N = {
         modal_sb_title: 'Supabase 실시간 클라우드 동기화',
         modal_sb_url: 'Supabase Project URL *',
         modal_sb_key: 'Supabase Anon / Publishable Key *',
-        modal_sb_table: '테이블명 (Table)',
-        modal_sb_rowid: '문서 ID (Row ID)',
+        modal_sb_schema_label: '정규화 테이블 구조 (3NF)',
         modal_sb_autosync: '수정 즉시 자동 서버 저장 및 실시간 수신 (Auto-Sync)',
         modal_sb_sql_title: '1회 초기 테이블 생성 SQL (Supabase SQL Editor)',
         btn_copy_sql: 'SQL 복사',
@@ -778,8 +810,7 @@ const I18N = {
         modal_sb_title: 'Supabase Real-Time Cloud Sync',
         modal_sb_url: 'Supabase Project URL *',
         modal_sb_key: 'Supabase Anon / Publishable Key *',
-        modal_sb_table: 'Table Name',
-        modal_sb_rowid: 'State Row ID',
+        modal_sb_schema_label: 'Normalized Database Tables (3NF)',
         modal_sb_autosync: 'Auto-save edits & receive real-time updates (Auto-Sync)',
         modal_sb_sql_title: 'One-Time Table Setup SQL (Supabase SQL Editor)',
         btn_copy_sql: 'Copy SQL',
@@ -796,7 +827,7 @@ function t(key) {
 }
 
 function formatTier(n) {
-    return currentLang === 'en' ? `Tier ${n}` : `${n}단`;
+    return currentLang === 'en' ? `L${n}` : `${n}단`;
 }
 
 function toggleLanguage() {
@@ -808,8 +839,9 @@ function toggleLanguage() {
 
 function applyLanguage() {
     document.documentElement.lang = currentLang;
+    document.title = currentLang === 'en' ? 'Smart Factory 3D Inventory Kiosk' : '스마트 팩토리 3D 인벤토리 키오스크';
     const langLabel = document.getElementById('lang-label');
-    if (langLabel) langLabel.textContent = currentLang.toUpperCase();
+    if (langLabel) langLabel.textContent = currentLang === 'en' ? '한글' : 'EN';
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
@@ -1229,13 +1261,15 @@ function onPointerMove(event) {
         document.body.style.cursor = 'pointer';
 
         const isMultiTier = (data.tiers || 1) > 1;
-        const tierText = (isMultiTier && hit.tier) ? ` • ${hit.tier}단` : '';
+        const tierText = (isMultiTier && hit.tier) ? ` • ${formatTier(hit.tier)}` : '';
         const matchingProfiles = (isMultiTier && hit.tier)
             ? data.profiles.filter(p => (p.tier || 1) === hit.tier)
             : data.profiles;
 
         document.getElementById('tooltip-title').textContent = `${data.codeLabel}${tierText}`;
-        document.getElementById('tooltip-desc').textContent = `${data.name} (${matchingProfiles.length}종 프로파일 적재)`;
+        document.getElementById('tooltip-desc').textContent = currentLang === 'en'
+            ? `${data.name} (${matchingProfiles.length} profiles stored)`
+            : `${data.name} (${matchingProfiles.length}종 프로파일 적재)`;
         tooltip.style.left = `${event.clientX + 15}px`;
         tooltip.style.top = `${event.clientY + 15}px`;
         tooltip.classList.remove('hidden');
@@ -1969,7 +2003,7 @@ function populateProfileTierSelect(rackId, preferredTier = 1) {
     for (let t = 1; t <= tierCount; t++) {
         const opt = document.createElement('option');
         opt.value = t;
-        opt.textContent = `${t}단`;
+        opt.textContent = formatTier(t);
         tierSelect.appendChild(opt);
     }
     const clampedTier = Math.min(tierCount, Math.max(1, parseInt(preferredTier) || 1));
@@ -1985,7 +2019,7 @@ function onProfileRackSelectChange() {
 
 function onProfileTierSelectChange() {
     const tierVal = document.getElementById('profile-form-tier').value;
-    document.getElementById('profile-form-layer').value = `${tierVal}단`;
+    document.getElementById('profile-form-layer').value = formatTier(tierVal);
 }
 
 function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefillItem = null) {
@@ -2023,7 +2057,7 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
             ? `<i class="fa-solid fa-code-branch text-sky-400"></i> [${prefillItem.code}] 타 구역 추가 입고`
             : `<i class="fa-solid fa-box-open text-sky-400"></i> 새 프로파일 품목 추가`;
         populateProfileRackAndTierSelects(data.id, defaultTier);
-        document.getElementById('profile-form-layer').value = `${defaultTier}단`;
+        document.getElementById('profile-form-layer').value = formatTier(defaultTier);
         document.getElementById('profile-form-code').value = prefillItem ? (prefillItem.code || '') : '';
         document.getElementById('profile-form-material').value = prefillItem ? (prefillItem.material || 'A6063-T5') : 'A6063-T5';
         document.getElementById('profile-form-name').value = prefillItem ? (prefillItem.name || '') : '';
@@ -2703,8 +2737,10 @@ function jumpToLocationFromInventory(blockId, tier = null) {
         selectBlock(blockId, true, tier);
         const data = factoryBlocksData.find(b => b.id === blockId);
         if (data) {
-            const tierText = tier ? ` (${tier}단)` : '';
-            showToast(`[${data.codeLabel}${tierText}] 구역으로 이동했습니다.`);
+            const tierText = tier ? ` (${formatTier(tier)})` : '';
+            showToast(currentLang === 'en'
+                ? `Moved to [${data.codeLabel}${tierText}]`
+                : `[${data.codeLabel}${tierText}] 구역으로 이동했습니다.`);
         }
     }, 80);
 }
@@ -2748,9 +2784,11 @@ function openMoveProfileModal(blockId, profileIdx) {
     const item = sourceData.profiles[profileIdx];
 
     moveSource = { blockId, profileIdx };
-    const tierLabel = sourceData.tiers > 1 ? `${item.tier || 1}단` : (item.layer || '1단');
+    const tierLabel = sourceData.tiers > 1 ? formatTier(item.tier || 1) : (currentLang === 'en' ? formatTier(item.tier || 1) : (item.layer || '1단'));
     document.getElementById('move-item-code').textContent = item.code;
-    document.getElementById('move-item-source').textContent = `현재 위치: ${sourceData.codeLabel} · ${tierLabel} (보유 ${item.qty} EA)`;
+    document.getElementById('move-item-source').textContent = currentLang === 'en'
+        ? `Current: ${sourceData.codeLabel} · ${tierLabel} (${item.qty} EA)`
+        : `현재 위치: ${sourceData.codeLabel} · ${tierLabel} (보유 ${item.qty} EA)`;
     document.getElementById('move-item-name').textContent = item.name;
     document.getElementById('move-qty').value = item.qty;
     document.getElementById('move-qty').max = item.qty;
@@ -2784,7 +2822,7 @@ function onMoveTargetRackChange() {
     for (let t = 1; t <= tierCount; t++) {
         const opt = document.createElement('option');
         opt.value = t;
-        opt.textContent = `${t}단`;
+        opt.textContent = formatTier(t);
         tierSelect.appendChild(opt);
     }
 }
@@ -3399,8 +3437,8 @@ async function downloadShareableHtml() {
                 jsText.slice(jsEnd + endMarker.length)
             ).replace(new RegExp('<\\/' + 'script', 'gi'), '<\\\\/' + 'script');
 
-            const styleLinkRegex = /<link[^>]*href=["']styles\.css["'][^>]*>/i;
-            const appScriptRegex = new RegExp('<script[^>]*src=["\']app\\.js["\'][^>]*>\\s*<\\/' + 'script>', 'i');
+            const styleLinkRegex = /<link[^>]*href=["']styles\.css(?:\?[^"']*)?["'][^>]*>/i;
+            const appScriptRegex = new RegExp('<script[^>]*src=["\']app\\.js(?:\\?[^"\']*)?["\'][^>]*>\\s*<\\/' + 'script>', 'i');
 
             finalHtml = PRISTINE_HTML_SNAPSHOT
                 .replace(styleLinkRegex, () => '<style>\n' + cssText + '\n</style>')
@@ -3528,7 +3566,7 @@ async function reloadFromDataJson() {
 }
 
 /**
- * 9. Supabase 실시간 클라우드 DB 연동 (Push / Pull / Realtime Sync)
+ * 9. Supabase 정규화 테이블 실시간 클라우드 DB 연동 (racks / profiles / rack_inventory)
  */
 let supabaseClient = null;
 let supabaseRealtimeChannel = null;
@@ -3537,7 +3575,16 @@ let cloudStatusMessage = '';
 let lastCloudSyncAt = null;
 let lastSyncedHash = null;
 let cloudPushTimer = null;
+let realtimePullTimer = null;
+let isPushingToCloud = false;
 let pendingRemoteBlocks = null;
+
+function generateRowId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return 'inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
 
 function normalizeSupabaseUrl(raw) {
     if (typeof raw !== 'string') return '';
@@ -3555,9 +3602,9 @@ function getSupabaseConfig() {
     return {
         url: normalizeSupabaseUrl(override.url) || normalizeSupabaseUrl(DEFAULT_SUPABASE_CONFIG.url),
         anonKey: cleanStr(override.anonKey) || cleanStr(DEFAULT_SUPABASE_CONFIG.anonKey),
-        table: cleanStr(override.table) || cleanStr(DEFAULT_SUPABASE_CONFIG.table) || 'factory_inventory_state',
-        rowId: cleanStr(override.rowId) || cleanStr(DEFAULT_SUPABASE_CONFIG.rowId) || 'main',
-        autoSync: typeof override.autoSync === 'boolean' ? override.autoSync : Boolean(DEFAULT_SUPABASE_CONFIG.autoSync)
+        autoSync: typeof override.autoSync === 'boolean' ? override.autoSync : Boolean(DEFAULT_SUPABASE_CONFIG.autoSync),
+        legacyTable: DEFAULT_SUPABASE_CONFIG.legacyTable || 'factory_inventory_state',
+        legacyRowId: DEFAULT_SUPABASE_CONFIG.legacyRowId || 'main'
     };
 }
 
@@ -3607,7 +3654,7 @@ function updateCloudStatusBadge() {
     if (modalDot && modalMsg) {
         if (cloudSyncState === 'connected') {
             modalDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0';
-            modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+            modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Connected to Supabase (racks / profiles / rack_inventory)' : 'Supabase 3개 정규화 테이블 실시간 동기화 연결됨');
         } else if (cloudSyncState === 'syncing') {
             modalDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse shrink-0';
             modalMsg.textContent = cloudStatusMessage || (currentLang === 'en' ? 'Syncing with Supabase...' : 'Supabase와 동기화 중...');
@@ -3625,6 +3672,152 @@ function updateCloudStatusBadge() {
     }
 }
 
+function buildNormalizedPayloads(blocks) {
+    const now = new Date().toISOString();
+    const profileMap = new Map();
+    const rackRows = [];
+    const invRows = [];
+
+    (blocks || []).forEach((b, idx) => {
+        rackRows.push({
+            id: String(b.id),
+            fac: String(b.fac || 'Fac C'),
+            floor: b.floor === 'MEZZANINE' ? 'MEZZANINE' : 'GROUND',
+            code_label: String(b.codeLabel || b.id),
+            name: String(b.name || b.id),
+            description: String(b.desc || ''),
+            pos_x: Number(b.pos && b.pos.x) || 0,
+            pos_y: b.floor === 'MEZZANINE' ? 6.5 : (Number(b.pos && b.pos.y) || 0),
+            pos_z: Number(b.pos && b.pos.z) || 0,
+            size_w: Math.max(0.5, Number(b.size && b.size.w) || 2),
+            size_h: Math.max(0.5, Number(b.size && b.size.h) || 2.5),
+            size_d: Math.max(0.5, Number(b.size && b.size.d) || 8),
+            tiers: Math.max(1, parseInt(b.tiers) || 1),
+            sort_order: idx,
+            updated_at: now
+        });
+
+        (b.profiles || []).forEach(p => {
+            const rawCode = String(p.code || '').trim();
+            if (!rawCode) return;
+            const upperKey = rawCode.toUpperCase();
+            if (!profileMap.has(upperKey)) {
+                profileMap.set(upperKey, {
+                    code: rawCode,
+                    name: String(p.name || rawCode).trim(),
+                    length: String(getProfileLength(p) || '-').trim() || '-',
+                    color: String(getProfileColor(p) || '-').trim() || '-',
+                    material: String(p.material || 'A6063-T5').trim() || 'A6063-T5',
+                    default_min_qty: Math.max(0, parseInt(p.minQty) || 30),
+                    updated_at: now
+                });
+            }
+            const canonicalCode = profileMap.get(upperKey).code;
+            if (!p._invId) p._invId = generateRowId();
+
+            const tierNum = Math.max(1, parseInt(p.tier) || 1);
+            invRows.push({
+                id: String(p._invId),
+                rack_id: String(b.id),
+                profile_code: canonicalCode,
+                tier: tierNum,
+                layer_label: String(p.layer || formatTier(tierNum)).trim() || formatTier(tierNum),
+                qty: Math.max(0, parseInt(p.qty) || 0),
+                min_qty: Math.max(0, parseInt(p.minQty) || 0),
+                updated_at: now
+            });
+        });
+    });
+
+    return {
+        rackRows,
+        profileRows: Array.from(profileMap.values()),
+        invRows,
+        updatedAt: now
+    };
+}
+
+function assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows) {
+    const profileByUpperCode = new Map();
+    (profileRows || []).forEach(pr => {
+        if (!pr || !pr.code) return;
+        profileByUpperCode.set(String(pr.code).trim().toUpperCase(), pr);
+    });
+
+    const invByRackId = new Map();
+    (invRows || []).forEach(inv => {
+        if (!inv || !inv.rack_id) return;
+        if (!invByRackId.has(inv.rack_id)) invByRackId.set(inv.rack_id, []);
+        const master = profileByUpperCode.get(String(inv.profile_code || '').trim().toUpperCase());
+        invByRackId.get(inv.rack_id).push({
+            _invId: inv.id,
+            tier: Number(inv.tier) || 1,
+            code: master ? master.code : inv.profile_code,
+            name: master ? master.name : inv.profile_code,
+            length: master ? master.length : '-',
+            color: master ? master.color : '-',
+            material: master ? master.material : 'A6063-T5',
+            layer: inv.layer_label || `L${Number(inv.tier) || 1}`,
+            qty: Number(inv.qty) || 0,
+            minQty: Number(inv.min_qty) || 0
+        });
+    });
+
+    const blocks = (rackRows || []).map(r => {
+        const rackProfiles = (invByRackId.get(r.id) || []).sort((a, b) =>
+            (a.tier - b.tier) || a.code.localeCompare(b.code)
+        );
+        return {
+            id: r.id,
+            fac: r.fac,
+            floor: r.floor,
+            codeLabel: r.code_label || r.id,
+            name: r.name || r.id,
+            desc: r.description || '',
+            pos: { x: Number(r.pos_x) || 0, y: Number(r.pos_y) || 0, z: Number(r.pos_z) || 0 },
+            size: { w: Number(r.size_w) || 2, h: Number(r.size_h) || 2.5, d: Number(r.size_d) || 8 },
+            status: 'normal',
+            tiers: Number(r.tiers) || 1,
+            profiles: rackProfiles
+        };
+    });
+
+    return normalizeBlocksArray(blocks);
+}
+
+async function fetchNormalizedFromSupabase() {
+    const [rackRes, profileRes, invRes] = await Promise.all([
+        supabaseClient.from('racks').select('*').order('sort_order', { ascending: true }),
+        supabaseClient.from('profiles').select('*'),
+        supabaseClient.from('rack_inventory').select('*')
+    ]);
+
+    if (rackRes.error) throw rackRes.error;
+    if (profileRes.error) throw profileRes.error;
+    if (invRes.error) throw invRes.error;
+
+    return {
+        rackRows: rackRes.data || [],
+        profileRows: profileRes.data || [],
+        invRows: invRes.data || []
+    };
+}
+
+async function tryMigrateFromLegacyStateTable() {
+    const cfg = getSupabaseConfig();
+    try {
+        const { data, error } = await supabaseClient
+            .from(cfg.legacyTable)
+            .select('blocks')
+            .eq('id', cfg.legacyRowId)
+            .maybeSingle();
+        if (!error && data && Array.isArray(data.blocks) && data.blocks.length > 0) {
+            return normalizeBlocksArray(data.blocks);
+        }
+    } catch (_) {}
+    return null;
+}
+
 function applyRemoteBlocksFromCloud(remoteBlocks, updatedAt = null, showNotice = false) {
     if (!Array.isArray(remoteBlocks) || remoteBlocks.length === 0) return;
 
@@ -3637,6 +3830,8 @@ function applyRemoteBlocksFromCloud(remoteBlocks, updatedAt = null, showNotice =
     lastCloudSyncAt = updatedAt || new Date().toISOString();
 
     if (incomingHash === localHash) {
+        // 동일 데이터라도 _invId 동기화를 위해 내부 배열만 업데이트
+        factoryBlocksData = normalized;
         updateCloudStatusBadge();
         return;
     }
@@ -3681,6 +3876,10 @@ function applyRemoteBlocksFromCloud(remoteBlocks, updatedAt = null, showNotice =
 }
 
 function teardownSupabaseRealtime() {
+    if (realtimePullTimer) {
+        clearTimeout(realtimePullTimer);
+        realtimePullTimer = null;
+    }
     if (supabaseRealtimeChannel && supabaseClient) {
         try {
             supabaseClient.removeChannel(supabaseRealtimeChannel);
@@ -3689,34 +3888,41 @@ function teardownSupabaseRealtime() {
     supabaseRealtimeChannel = null;
 }
 
+function scheduleRealtimePull() {
+    if (!getSupabaseConfig().autoSync || isPushingToCloud) return;
+    if (realtimePullTimer) clearTimeout(realtimePullTimer);
+    realtimePullTimer = setTimeout(async () => {
+        realtimePullTimer = null;
+        if (isPushingToCloud || !supabaseClient) return;
+        try {
+            const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
+            if (rackRows.length === 0) return;
+            const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
+            if (computeDataHash(assembled) === computeDataHash(factoryBlocksData)) return;
+
+            if (typeof transformControl !== 'undefined' && transformControl && transformControl.dragging) {
+                pendingRemoteBlocks = assembled;
+                return;
+            }
+            applyRemoteBlocksFromCloud(assembled, new Date().toISOString(), true);
+        } catch (err) {
+            console.warn('Realtime sync fetch skipped:', err.message);
+        }
+    }, 350);
+}
+
 function subscribeSupabaseRealtime() {
     teardownSupabaseRealtime();
     if (!supabaseClient) return;
-    const cfg = getSupabaseConfig();
 
     supabaseRealtimeChannel = supabaseClient
-        .channel(`factory-sync-${cfg.table}-${cfg.rowId}`)
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: cfg.table, filter: `id=eq.${cfg.rowId}` },
-            (payload) => {
-                if (!getSupabaseConfig().autoSync) return;
-                const row = payload && payload.new;
-                if (!row || !Array.isArray(row.blocks) || row.blocks.length === 0) return;
-
-                const incomingHash = computeDataHash(row.blocks);
-                if (incomingHash === computeDataHash(factoryBlocksData)) return;
-
-                if (typeof transformControl !== 'undefined' && transformControl && transformControl.dragging) {
-                    pendingRemoteBlocks = row.blocks;
-                    return;
-                }
-                applyRemoteBlocksFromCloud(row.blocks, row.updated_at, true);
-            }
-        )
+        .channel('factory-normalized-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'racks' }, scheduleRealtimePull)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleRealtimePull)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rack_inventory' }, scheduleRealtimePull)
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-                setCloudStatus('connected', currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+                setCloudStatus('connected', currentLang === 'en' ? 'Connected (racks / profiles / rack_inventory)' : 'Supabase 정규화 테이블 실시간 동기화 연결됨');
             }
         });
 }
@@ -3735,28 +3941,29 @@ async function initSupabaseConnection() {
         setCloudStatus('syncing', currentLang === 'en' ? 'Connecting to Supabase...' : 'Supabase 연결 중...');
         supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
 
-        const { data, error } = await supabaseClient
-            .from(cfg.table)
-            .select('id, revision, blocks, updated_at')
-            .eq('id', cfg.rowId)
-            .maybeSingle();
+        const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
 
-        if (error) throw error;
-
-        if (data && Array.isArray(data.blocks) && data.blocks.length > 0) {
-            applyRemoteBlocksFromCloud(data.blocks, data.updated_at, false);
+        if (rackRows.length > 0) {
+            const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
+            const latestTs = rackRows[0].updated_at || new Date().toISOString();
+            applyRemoteBlocksFromCloud(assembled, latestTs, false);
         } else {
-            // Supabase 테이블에 초기 행이 없으면 현재 데이터(data.json / 기본값)를 자동 시딩
+            // 3개 테이블이 비어있으면 기존 factory_inventory_state 데이터가 있을 경우 자동 이관, 없으면 초기 데이터 시딩
+            const legacyBlocks = await tryMigrateFromLegacyStateTable();
+            if (legacyBlocks && legacyBlocks.length > 0) {
+                factoryBlocksData = legacyBlocks;
+            }
             const ok = await pushDataToSupabase({ silent: true });
             if (!ok) return false;
         }
 
         subscribeSupabaseRealtime();
-        setCloudStatus('connected', currentLang === 'en' ? 'Connected to Supabase (Real-Time Active)' : 'Supabase 실시간 동기화 연결됨');
+        setCloudStatus('connected', currentLang === 'en' ? 'Connected (racks / profiles / rack_inventory)' : 'Supabase 정규화 테이블 실시간 동기화 연결됨');
         return true;
     } catch (err) {
         console.error('Supabase init error:', err);
-        setCloudStatus('error', err.message || 'Connection error');
+        const msg = err && err.message ? err.message : 'Connection error';
+        setCloudStatus('error', msg);
         return false;
     }
 }
@@ -3784,24 +3991,57 @@ async function pushDataToSupabase({ silent = false } = {}) {
         supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
     }
 
+    isPushingToCloud = true;
     try {
-        setCloudStatus('syncing', currentLang === 'en' ? 'Uploading to Supabase...' : 'Supabase 서버에 저장 중...');
-        const payload = {
-            id: cfg.rowId,
-            revision: Date.now(),
-            blocks: factoryBlocksData,
-            updated_at: new Date().toISOString()
-        };
+        setCloudStatus('syncing', currentLang === 'en' ? 'Saving to normalized tables...' : '정규화 테이블에 저장 중...');
+        const { rackRows, profileRows, invRows, updatedAt } = buildNormalizedPayloads(factoryBlocksData);
 
-        const { error } = await supabaseClient
-            .from(cfg.table)
-            .upsert(payload, { onConflict: 'id' });
+        if (profileRows.length > 0) {
+            const { error: profErr } = await supabaseClient
+                .from('profiles')
+                .upsert(profileRows, { onConflict: 'code' });
+            if (profErr) throw profErr;
+        }
 
-        if (error) throw error;
+        if (rackRows.length > 0) {
+            const { error: rackErr } = await supabaseClient
+                .from('racks')
+                .upsert(rackRows, { onConflict: 'id' });
+            if (rackErr) throw rackErr;
+        }
+
+        if (invRows.length > 0) {
+            const { error: invErr } = await supabaseClient
+                .from('rack_inventory')
+                .upsert(invRows, { onConflict: 'id' });
+            if (invErr) throw invErr;
+        }
+
+        // 삭제된 적재 항목 및 삭제된 랙 정리 (racks 삭제보다 rack_inventory 정리를 먼저 실행해 랙 코드 변경 시 연쇄 삭제 방지)
+        const [{ data: remoteInvIds, error: selInvErr }, { data: remoteRackIds, error: selRackErr }] = await Promise.all([
+            supabaseClient.from('rack_inventory').select('id'),
+            supabaseClient.from('racks').select('id')
+        ]);
+        if (selInvErr) throw selInvErr;
+        if (selRackErr) throw selRackErr;
+
+        const currentInvIdSet = new Set(invRows.map(r => r.id));
+        const removedInvIds = (remoteInvIds || []).map(r => r.id).filter(id => !currentInvIdSet.has(id));
+        if (removedInvIds.length > 0) {
+            const { error: delInvErr } = await supabaseClient.from('rack_inventory').delete().in('id', removedInvIds);
+            if (delInvErr) throw delInvErr;
+        }
+
+        const currentRackIdSet = new Set(rackRows.map(r => r.id));
+        const removedRackIds = (remoteRackIds || []).map(r => r.id).filter(id => !currentRackIdSet.has(id));
+        if (removedRackIds.length > 0) {
+            const { error: delRackErr } = await supabaseClient.from('racks').delete().in('id', removedRackIds);
+            if (delRackErr) throw delRackErr;
+        }
 
         lastSyncedHash = computeDataHash(factoryBlocksData);
         currentSourceHash = lastSyncedHash;
-        lastCloudSyncAt = payload.updated_at;
+        lastCloudSyncAt = updatedAt;
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             revision: DEFAULT_DATA_REVISION,
             sourceHash: lastSyncedHash,
@@ -3812,7 +4052,7 @@ async function pushDataToSupabase({ silent = false } = {}) {
         if (!supabaseRealtimeChannel) {
             subscribeSupabaseRealtime();
         }
-        setCloudStatus('connected', currentLang === 'en' ? 'Saved to Supabase!' : 'Supabase 서버에 저장 완료');
+        setCloudStatus('connected', currentLang === 'en' ? 'Saved to Supabase!' : 'Supabase 저장 완료');
         if (!silent) {
             showToast(currentLang === 'en'
                 ? 'Saved to Supabase! Other devices will reflect this immediately.'
@@ -3826,6 +4066,8 @@ async function pushDataToSupabase({ silent = false } = {}) {
             showToast((currentLang === 'en' ? 'Supabase save failed: ' : '서버 저장 실패: ') + (err.message || 'Error'));
         }
         return false;
+    } finally {
+        setTimeout(() => { isPushingToCloud = false; }, 300);
     }
 }
 
@@ -3841,22 +4083,17 @@ async function pullDataFromSupabase({ silent = false } = {}) {
 
     try {
         setCloudStatus('syncing', currentLang === 'en' ? 'Fetching from Supabase...' : '서버 데이터 불러오는 중...');
-        const { data, error } = await supabaseClient
-            .from(cfg.table)
-            .select('id, revision, blocks, updated_at')
-            .eq('id', cfg.rowId)
-            .maybeSingle();
-
-        if (error) throw error;
-        if (!data || !Array.isArray(data.blocks) || data.blocks.length === 0) {
-            setCloudStatus('connected', currentLang === 'en' ? 'No remote data yet.' : '서버에 저장된 데이터가 아직 없습니다.');
+        const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
+        if (rackRows.length === 0) {
+            setCloudStatus('connected', currentLang === 'en' ? 'No remote racks yet.' : '서버에 저장된 랙 데이터가 아직 없습니다.');
             if (!silent) {
                 showToast(currentLang === 'en' ? 'No saved data on Supabase yet.' : '서버에 저장된 데이터가 아직 없습니다.');
             }
             return false;
         }
 
-        applyRemoteBlocksFromCloud(data.blocks, data.updated_at, false);
+        const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
+        applyRemoteBlocksFromCloud(assembled, new Date().toISOString(), false);
         setCloudStatus('connected', currentLang === 'en' ? 'Synced from Supabase' : '서버 데이터 동기화 완료');
         if (!silent) {
             showToast(currentLang === 'en' ? 'Loaded latest layout & inventory from Supabase!' : 'Supabase에서 최신 레이아웃과 재고를 불러왔습니다!');
@@ -3888,8 +4125,6 @@ function openSupabaseModal() {
     const cfg = getSupabaseConfig();
     document.getElementById('sb-form-url').value = cfg.url;
     document.getElementById('sb-form-key').value = cfg.anonKey;
-    document.getElementById('sb-form-table').value = cfg.table;
-    document.getElementById('sb-form-rowid').value = cfg.rowId;
     document.getElementById('sb-form-autosync').checked = cfg.autoSync;
     updateCloudStatusBadge();
     document.getElementById('supabase-modal').classList.remove('hidden');
@@ -3902,8 +4137,6 @@ function closeSupabaseModal() {
 async function saveSupabaseConfigAndConnect() {
     const url = normalizeSupabaseUrl(document.getElementById('sb-form-url').value);
     const anonKey = document.getElementById('sb-form-key').value.trim();
-    const table = document.getElementById('sb-form-table').value.trim() || 'factory_inventory_state';
-    const rowId = document.getElementById('sb-form-rowid').value.trim() || 'main';
     const autoSync = document.getElementById('sb-form-autosync').checked;
 
     if (!url || !anonKey) {
@@ -3911,7 +4144,7 @@ async function saveSupabaseConfigAndConnect() {
         return;
     }
 
-    localStorage.setItem(SUPABASE_CONFIG_STORAGE_KEY, JSON.stringify({ url, anonKey, table, rowId, autoSync }));
+    localStorage.setItem(SUPABASE_CONFIG_STORAGE_KEY, JSON.stringify({ url, anonKey, autoSync }));
     const ok = await initSupabaseConnection();
     if (ok) {
         showToast(currentLang === 'en' ? 'Supabase connected & synced!' : 'Supabase 연결 및 동기화가 완료되었습니다!');
@@ -3931,27 +4164,70 @@ function clearSupabaseOverrideConfig() {
 }
 
 function copySupabaseSql() {
-    const table = (document.getElementById('sb-form-table').value.trim() || 'factory_inventory_state').replace(/[^a-zA-Z0-9_]/g, '');
     const sql = [
-        `create table if not exists public.${table} (`,
+        `create table if not exists public.racks (`,
         `  id text primary key,`,
-        `  revision bigint not null default 1,`,
-        `  blocks jsonb not null default '[]'::jsonb,`,
+        `  fac text not null,`,
+        `  floor text not null check (floor in ('GROUND', 'MEZZANINE')),`,
+        `  code_label text not null,`,
+        `  name text not null,`,
+        `  description text not null default '',`,
+        `  pos_x double precision not null default 0,`,
+        `  pos_y double precision not null default 0,`,
+        `  pos_z double precision not null default 0,`,
+        `  size_w double precision not null default 2.0,`,
+        `  size_h double precision not null default 2.5,`,
+        `  size_d double precision not null default 8.0,`,
+        `  tiers integer not null default 1,`,
+        `  sort_order integer not null default 0,`,
         `  updated_at timestamptz not null default now()`,
         `);`,
         ``,
-        `alter table public.${table} enable row level security;`,
+        `create table if not exists public.profiles (`,
+        `  code text primary key,`,
+        `  name text not null,`,
+        `  length text not null default '-',`,
+        `  color text not null default '-',`,
+        `  material text not null default 'A6063-T5',`,
+        `  default_min_qty integer not null default 30,`,
+        `  updated_at timestamptz not null default now()`,
+        `);`,
         ``,
-        `create policy "Allow public read" on public.${table} for select using (true);`,
-        `create policy "Allow public insert" on public.${table} for insert with check (true);`,
-        `create policy "Allow public update" on public.${table} for update using (true);`,
+        `create table if not exists public.rack_inventory (`,
+        `  id text primary key,`,
+        `  rack_id text not null references public.racks(id) on delete cascade on update cascade,`,
+        `  profile_code text not null references public.profiles(code) on delete cascade on update cascade,`,
+        `  tier integer not null default 1,`,
+        `  layer_label text not null default 'L1',`,
+        `  qty integer not null default 0 check (qty >= 0),`,
+        `  min_qty integer not null default 0 check (min_qty >= 0),`,
+        `  updated_at timestamptz not null default now()`,
+        `);`,
         ``,
-        `alter publication supabase_realtime add table public.${table};`
+        `create index if not exists idx_rack_inventory_rack_id on public.rack_inventory(rack_id);`,
+        `create index if not exists idx_rack_inventory_profile_code on public.rack_inventory(profile_code);`,
+        ``,
+        `alter table public.racks enable row level security;`,
+        `alter table public.profiles enable row level security;`,
+        `alter table public.rack_inventory enable row level security;`,
+        ``,
+        `drop policy if exists "racks_public_all" on public.racks;`,
+        `create policy "racks_public_all" on public.racks for all using (true) with check (true);`,
+        `drop policy if exists "profiles_public_all" on public.profiles;`,
+        `create policy "profiles_public_all" on public.profiles for all using (true) with check (true);`,
+        `drop policy if exists "rack_inventory_public_all" on public.rack_inventory;`,
+        `create policy "rack_inventory_public_all" on public.rack_inventory for all using (true) with check (true);`,
+        ``,
+        `do $$ begin`,
+        `  begin alter publication supabase_realtime add table public.racks; exception when duplicate_object then null; end;`,
+        `  begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;`,
+        `  begin alter publication supabase_realtime add table public.rack_inventory; exception when duplicate_object then null; end;`,
+        `end $$;`
     ].join('\n');
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(sql).then(() => {
-            showToast(currentLang === 'en' ? 'Copied Supabase SQL to clipboard!' : 'Supabase 테이블 생성 SQL이 클립보드에 복사되었습니다!');
+            showToast(currentLang === 'en' ? 'Copied normalized SQL (3 tables) to clipboard!' : '3개 정규화 테이블 SQL이 클립보드에 복사되었습니다!');
         }).catch(() => {
             showToast(currentLang === 'en' ? 'Clipboard copy failed.' : '클립보드 복사에 실패했습니다.');
         });

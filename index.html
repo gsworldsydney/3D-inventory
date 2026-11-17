@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스마트 팩토리 3D 인벤토리 키오스크</title>
+    <title>Smart Factory 3D Inventory Kiosk</title>
     <!-- Tailwind CSS 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Three.js 및 OrbitControls 로드 -->
@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
@@ -33,7 +33,7 @@
                     SMART FACTORY <span class="text-sky-400">3D INVENTORY</span>
                     <span class="text-xs bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-medium">KIOSK</span>
                 </h1>
-                <p id="header-subtitle" class="text-xs text-slate-400 hidden sm:block">3D 구역(Rack)을 클릭하여 적재된 프로파일 재고 현황을 확인하세요.</p>
+                <p id="header-subtitle" class="text-xs text-slate-400 hidden sm:block">Click any 3D Rack to inspect stored aluminum profiles and stock.</p>
             </div>
         </div>
 
@@ -43,11 +43,11 @@
             <div class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-inner">
                 <button id="nav-map-btn" onclick="switchPage('map')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition flex items-center gap-1.5 shadow">
                     <i class="fa-solid fa-cubes"></i>
-                    <span data-i18n="nav_map">3D 공장 지도</span>
+                    <span data-i18n="nav_map">3D Factory Map</span>
                 </button>
                 <button id="nav-inv-btn" onclick="switchPage('inventory')" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5">
                     <i class="fa-solid fa-boxes-stacked"></i>
-                    <span data-i18n="nav_inv">전체 인벤토리</span>
+                    <span data-i18n="nav_inv">Full Inventory</span>
                     <span id="nav-inv-count" class="px-1.5 py-0.2 rounded-md bg-slate-800 text-sky-300 text-[10px] font-mono">0</span>
                 </button>
             </div>
@@ -57,52 +57,52 @@
                 <!-- 새 랙 추가 버튼 -->
                 <button onclick="openRackModal('add')" class="bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-1.5 shadow-lg">
                     <i class="fa-solid fa-plus"></i>
-                    <span class="hidden sm:inline" data-i18n="btn_add_rack">랙 추가</span>
+                    <span class="hidden sm:inline" data-i18n="btn_add_rack">Add Rack</span>
                 </button>
                 <!-- 배치 편집 모드 토글 버튼 -->
                 <button id="btn-edit-mode" onclick="toggleEditMode()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg">
                     <i class="fa-solid fa-up-down-left-right text-amber-400"></i>
-                    <span id="edit-mode-text">배치 편집 OFF</span>
+                    <span id="edit-mode-text">Layout Edit OFF</span>
                 </button>
                 <div class="relative hidden md:block">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                    <input type="text" id="search-input" data-i18n-placeholder="search_placeholder" placeholder="프로파일 코드 검색 (예: AL-4040)" 
+                    <input type="text" id="search-input" data-i18n-placeholder="search_placeholder" placeholder="Search profile code (e.g. AL-4040)" 
                         class="bg-slate-800/80 border border-slate-700 text-sm rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-64 transition">
                 </div>
                 <button id="btn-reset-cam" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg">
                     <i class="fa-solid fa-compress"></i>
-                    <span class="hidden sm:inline" data-i18n="btn_full_view">전체 뷰</span>
+                    <span class="hidden sm:inline" data-i18n="btn_full_view">Full View</span>
                 </button>
             </div>
 
             <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 -->
-            <button id="btn-cloud-config" onclick="openSupabaseModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase 실시간 클라우드 DB 연동 설정">
+            <button id="btn-cloud-config" onclick="openSupabaseModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase Real-Time Cloud DB Settings">
                 <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>
                 <i class="fa-solid fa-database text-sky-400"></i>
-                <span id="cloud-status-text" class="hidden sm:inline" data-i18n="cloud_disconnected">DB 설정</span>
+                <span id="cloud-status-text" class="hidden sm:inline" data-i18n="cloud_disconnected">DB Setup</span>
             </button>
 
-            <button id="btn-cloud-push" onclick="pushToSupabaseManual()" class="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="현재 레이아웃 및 재고 변경사항을 Supabase 서버에 즉시 저장">
+            <button id="btn-cloud-push" onclick="pushToSupabaseManual()" class="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Save current layout & inventory to Supabase now">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
-                <span class="hidden sm:inline" data-i18n="btn_cloud_save">서버 저장</span>
+                <span class="hidden sm:inline" data-i18n="btn_cloud_save">Save Cloud</span>
             </button>
 
             <!-- data.json 내보내기 버튼 (배포/서버용 JSON 파일 저장) -->
-            <button id="btn-save-json" onclick="downloadDataJson()" class="bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="배포용 data.json 파일 다운로드">
+            <button id="btn-save-json" onclick="downloadDataJson()" class="bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download data.json for deployment">
                 <i class="fa-solid fa-code"></i>
-                <span class="hidden sm:inline" data-i18n="btn_save_json">data.json 저장</span>
+                <span class="hidden sm:inline" data-i18n="btn_save_json">Save data.json</span>
             </button>
 
             <!-- 공유용 HTML 저장 버튼 (현재 배치/재고 포함 파일 다운로드) -->
-            <button id="btn-save-html" onclick="downloadShareableHtml()" class="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="현재 랙 배치와 재고 데이터를 포함한 공유용 HTML 파일 다운로드">
+            <button id="btn-save-html" onclick="downloadShareableHtml()" class="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Download standalone shareable HTML">
                 <i class="fa-solid fa-file-export"></i>
-                <span class="hidden sm:inline" data-i18n="btn_save_html">공유용 저장</span>
+                <span class="hidden sm:inline" data-i18n="btn_save_html">Save for Share</span>
             </button>
 
             <!-- 오른쪽 상단 한/영 언어 전환 지구본 버튼 -->
-            <button id="btn-lang-toggle" onclick="toggleLanguage()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-sky-400/60 text-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="한국어 / English 전환">
+            <button id="btn-lang-toggle" onclick="toggleLanguage()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-sky-400/60 text-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Switch Language (English / 한국어)">
                 <i class="fa-solid fa-globe text-sky-400 text-sm"></i>
-                <span id="lang-label">KO</span>
+                <span id="lang-label">한글</span>
             </button>
         </div>
     </header>
@@ -119,40 +119,40 @@
                 <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
                     <!-- 동(Facility) 빠른 필터 버튼 -->
                     <div class="flex flex-wrap gap-1.5 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl">
-                        <button onclick="focusZone('ALL', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500 text-white transition" data-i18n="zone_all">전체 공장</button>
-                        <button onclick="focusZone('C', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_c">Fac C (좌측동)</button>
-                        <button onclick="focusZone('A', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_a">Fac A (중앙동)</button>
-                        <button onclick="focusZone('B', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_b">Fac B (우측동)</button>
+                        <button onclick="focusZone('ALL', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500 text-white transition" data-i18n="zone_all">All Facilities</button>
+                        <button onclick="focusZone('C', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_c">Fac C (Left)</button>
+                        <button onclick="focusZone('A', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_a">Fac A (Center)</button>
+                        <button onclick="focusZone('B', this)" class="zone-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="zone_b">Fac B (Right)</button>
                     </div>
 
                     <!-- 층수(Floor) 전환 버튼 (Ground / Mezzanine) -->
                     <div class="flex gap-1 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl">
-                        <button onclick="setFloorFilter('ALL', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500 text-white transition" data-i18n="floor_all">전체 층</button>
-                        <button onclick="setFloorFilter('GROUND', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_1f">Ground (1층)</button>
-                        <button onclick="setFloorFilter('MEZZANINE', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_2f">Mezzanine (2층)</button>
+                        <button onclick="setFloorFilter('ALL', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500 text-white transition" data-i18n="floor_all">All Floors</button>
+                        <button onclick="setFloorFilter('GROUND', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_1f">Ground (1F)</button>
+                        <button onclick="setFloorFilter('MEZZANINE', this)" class="floor-btn px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_2f">Mezzanine (2F)</button>
                     </div>
                 </div>
 
                 <!-- 상태 범례 -->
                 <div class="hidden xl:flex items-center gap-4 bg-slate-900/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 text-xs pointer-events-auto">
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400 inline-block"></span> <span data-i18n="legend_normal">일반 구역</span></div>
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span> <span data-i18n="legend_warning">부족 주의</span></div>
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block ring-2 ring-rose-400/50"></span> <span data-i18n="legend_selected">선택된 구역</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400 inline-block"></span> <span data-i18n="legend_normal">Normal</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span> <span data-i18n="legend_warning">Low Stock</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block ring-2 ring-rose-400/50"></span> <span data-i18n="legend_selected">Selected</span></div>
                 </div>
             </div>
 
             <!-- 하단 조작 가이드 뱃지 -->
             <div class="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur-md border border-slate-800 px-4 py-2 rounded-2xl text-xs text-slate-300 flex items-center gap-4 pointer-events-none shadow-lg">
-                <span><i class="fa-solid fa-hand-pointer text-sky-400 mr-1"></i> <span data-i18n="guide_click">클릭/터치: 구역 선택</span></span>
-                <span><i class="fa-solid fa-arrows-up-down-left-right text-sky-400 mr-1"></i> <span data-i18n="guide_pan">드래그: 지도 이동</span></span>
-                <span><i class="fa-solid fa-magnifying-glass-plus text-sky-400 mr-1"></i> <span data-i18n="guide_zoom">휠/핀치: 확대/축소</span></span>
+                <span><i class="fa-solid fa-hand-pointer text-sky-400 mr-1"></i> <span data-i18n="guide_click">Click/Tap: Select Rack</span></span>
+                <span><i class="fa-solid fa-arrows-up-down-left-right text-sky-400 mr-1"></i> <span data-i18n="guide_pan">Drag: Pan Map</span></span>
+                <span><i class="fa-solid fa-magnifying-glass-plus text-sky-400 mr-1"></i> <span data-i18n="guide_zoom">Wheel/Pinch: Zoom</span></span>
             </div>
 
             <!-- 배치 편집 모드 전용 플로팅 인스펙터 (좌표/크기/단수 미세 조율 패널) -->
             <div id="layout-editor-panel" class="hidden absolute bottom-16 left-4 bg-slate-900/95 backdrop-blur-md border border-amber-500/50 p-4 rounded-2xl shadow-2xl z-30 w-80 text-xs">
                 <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                     <span class="font-bold text-amber-400 flex items-center gap-1.5">
-                        <i class="fa-solid fa-sliders"></i> <span data-i18n="editor_title">랙 위치/크기/단수 조율</span>
+                        <i class="fa-solid fa-sliders"></i> <span data-i18n="editor_title">Rack Layout &amp; Tiers</span>
                     </span>
                     <span id="editor-target-id" class="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-slate-300">-</span>
                 </div>
@@ -161,11 +161,11 @@
                     <!-- X, Z 좌표 미세 조정 -->
                     <div class="grid grid-cols-2 gap-2">
                         <div>
-                            <label class="text-slate-400 block mb-1" data-i18n="editor_x">X 좌표 (좌/우)</label>
+                            <label class="text-slate-400 block mb-1" data-i18n="editor_x">X Pos (Left/Right)</label>
                             <input type="number" step="0.1" id="edit-pos-x" oninput="updateBlockFromInputs()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono focus:border-amber-400 focus:outline-none">
                         </div>
                         <div>
-                            <label class="text-slate-400 block mb-1" data-i18n="editor_z">Z 좌표 (앞/뒤)</label>
+                            <label class="text-slate-400 block mb-1" data-i18n="editor_z">Z Pos (Front/Back)</label>
                             <input type="number" step="0.1" id="edit-pos-z" oninput="updateBlockFromInputs()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono focus:border-amber-400 focus:outline-none">
                         </div>
                     </div>
@@ -173,26 +173,26 @@
                     <!-- 가로(W), 깊이(D), 높이(H) 크기 미세 조정 -->
                     <div class="grid grid-cols-3 gap-2">
                         <div>
-                            <label class="text-slate-400 block mb-1" data-i18n="editor_w">너비 W</label>
+                            <label class="text-slate-400 block mb-1" data-i18n="editor_w">Width W</label>
                             <input type="number" step="0.1" min="0.5" id="edit-size-w" oninput="updateBlockFromInputs()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-amber-400 focus:outline-none">
                         </div>
                         <div>
-                            <label class="text-slate-400 block mb-1" data-i18n="editor_d">깊이 D</label>
+                            <label class="text-slate-400 block mb-1" data-i18n="editor_d">Depth D</label>
                             <input type="number" step="0.1" min="0.5" id="edit-size-d" oninput="updateBlockFromInputs()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-amber-400 focus:outline-none">
                         </div>
                         <div>
-                            <label class="text-slate-400 block mb-1" data-i18n="editor_h">높이 H</label>
+                            <label class="text-slate-400 block mb-1" data-i18n="editor_h">Height H</label>
                             <input type="number" step="0.1" min="0.5" id="edit-size-h" oninput="updateBlockFromInputs()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-amber-400 focus:outline-none">
                         </div>
                     </div>
 
                     <!-- 다단(Tier) 추가/삭제 컨트롤 -->
                     <div class="bg-slate-800/70 border border-slate-700/80 rounded-xl p-2 flex items-center justify-between">
-                        <span class="text-slate-300 font-medium"><i class="fa-solid fa-layer-group text-sky-400 mr-1"></i><span data-i18n="editor_tiers">랙 단수(Tier)</span></span>
+                        <span class="text-slate-300 font-medium"><i class="fa-solid fa-layer-group text-sky-400 mr-1"></i><span data-i18n="editor_tiers">Rack Tiers</span></span>
                         <div class="flex items-center gap-1.5">
-                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-rose-500/80 text-white font-bold transition" data-i18n="btn_tier_minus">- 단</button>
-                            <span id="edit-tier-count" class="font-mono font-bold text-amber-300 px-1.5">1단</span>
-                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-sky-500/80 text-white font-bold transition" data-i18n="btn_tier_plus">+ 단</button>
+                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-rose-500/80 text-white font-bold transition" data-i18n="btn_tier_minus">- Tier</button>
+                            <span id="edit-tier-count" class="font-mono font-bold text-amber-300 px-1.5">L1</span>
+                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-sky-500/80 text-white font-bold transition" data-i18n="btn_tier_plus">+ Tier</button>
                         </div>
                     </div>
 
@@ -200,27 +200,27 @@
                     <div class="flex items-center justify-between pt-0.5">
                         <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
                             <input type="checkbox" id="edit-snap-grid" checked onchange="toggleGridSnap()" class="rounded bg-slate-800 border-slate-600 text-amber-500 focus:ring-0">
-                            <span data-i18n="editor_snap">0.5m 격자 스냅</span>
+                            <span data-i18n="editor_snap">0.5m Grid Snap</span>
                         </label>
-                        <span class="text-[10px] text-emerald-400"><i class="fa-solid fa-floppy-disk mr-1"></i><span data-i18n="editor_autosave">자동 저장됨</span></span>
+                        <span class="text-[10px] text-emerald-400"><i class="fa-solid fa-floppy-disk mr-1"></i><span data-i18n="editor_autosave">Auto-saved</span></span>
                     </div>
 
                     <!-- 랙 추가 / 삭제 액션 -->
                     <div class="grid grid-cols-2 gap-2 pt-1">
                         <button onclick="openRackModal('add')" class="bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_new_rack">새 랙 추가</span>
+                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_new_rack">New Rack</span>
                         </button>
                         <button onclick="deleteSelectedRack()" class="bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-trash-can"></i> <span data-i18n="btn_del_rack">선택 랙 삭제</span>
+                            <i class="fa-solid fa-trash-can"></i> <span data-i18n="btn_del_rack">Delete Rack</span>
                         </button>
                     </div>
 
                     <!-- 좌표 JSON 내보내기 & 초기 상태 복원 버튼 -->
                     <div class="flex gap-1.5 pt-1">
                         <button onclick="exportLayoutCoordinates()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-lg">
-                            <i class="fa-solid fa-copy"></i> <span data-i18n="btn_copy_json">좌표 코드 복사</span>
+                            <i class="fa-solid fa-copy"></i> <span data-i18n="btn_copy_json">Copy Layout JSON</span>
                         </button>
-                        <button onclick="resetToDefaultData()" class="px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium py-2 rounded-xl transition" title="초기 기본 데이터로 리셋">
+                        <button onclick="resetToDefaultData()" class="px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium py-2 rounded-xl transition" title="Reset to default layout">
                             <i class="fa-solid fa-rotate-left"></i>
                         </button>
                     </div>
@@ -236,19 +236,19 @@
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center flex-wrap gap-1.5">
                         <span id="panel-zone-badge" class="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">ZONE A</span>
-                        <span id="panel-status-badge" class="px-2 py-0.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400">정상 가동</span>
+                        <span id="panel-status-badge" class="px-2 py-0.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400">In Stock</span>
                         <!-- 선택된 랙 정보 수정 / 삭제 버튼 -->
                         <div id="rack-action-btns" class="hidden items-center gap-1 ml-auto">
-                            <button onclick="openRackModal('edit')" class="px-2 py-0.5 rounded-lg text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="랙 이름/정보 수정">
-                                <i class="fa-solid fa-pen"></i> <span data-i18n="btn_edit_rack">랙 수정</span>
+                            <button onclick="openRackModal('edit')" class="px-2 py-0.5 rounded-lg text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Edit rack info">
+                                <i class="fa-solid fa-pen"></i> <span data-i18n="btn_edit_rack">Edit Rack</span>
                             </button>
-                            <button onclick="deleteSelectedRack()" class="px-2 py-0.5 rounded-lg text-[11px] bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition" title="이 랙 삭제">
+                            <button onclick="deleteSelectedRack()" class="px-2 py-0.5 rounded-lg text-[11px] bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition" title="Delete this rack">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
                     </div>
-                    <h2 id="panel-rack-title" class="text-xl font-bold text-white mt-1.5 truncate" data-i18n="panel_select_title">구역을 선택해주세요</h2>
-                    <p id="panel-rack-subtitle" class="text-xs text-slate-400 mt-0.5" data-i18n="panel_select_sub">3D 지도에서 창고 랙(Rack)을 클릭하면 상세 프로파일 목록이 표시됩니다.</p>
+                    <h2 id="panel-rack-title" class="text-xl font-bold text-white mt-1.5 truncate" data-i18n="panel_select_title">Select a Rack</h2>
+                    <p id="panel-rack-subtitle" class="text-xs text-slate-400 mt-0.5" data-i18n="panel_select_sub">Click a warehouse rack on the 3D map to view its profile inventory.</p>
                 </div>
                 <div id="panel-icon" class="w-11 h-11 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sky-400 text-lg shrink-0">
                     <i class="fa-solid fa-cubes-stacked"></i>
@@ -261,23 +261,23 @@
                 <div id="rack-tier-selector" class="hidden bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-1.5">
-                            <span class="text-[11px] font-bold text-sky-400"><i class="fa-solid fa-layer-group mr-1"></i><span data-i18n="tier_manage_title">랙 단수(층) 관리 및 조회</span></span>
-                            <span id="tier-total-badge" class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">총 5단 구조</span>
+                            <span class="text-[11px] font-bold text-sky-400"><i class="fa-solid fa-layer-group mr-1"></i><span data-i18n="tier_manage_title">Rack Tiers &amp; Filter</span></span>
+                            <span id="tier-total-badge" class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">5 Tiers</span>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-500/30 border border-slate-700 hover:border-rose-500/40 text-[11px] text-slate-300 hover:text-rose-300 transition" title="최상단 1개 층 삭제">
-                                <i class="fa-solid fa-minus"></i> <span data-i18n="btn_del_tier">단 삭제</span>
+                            <button onclick="changeSelectedRackTiers(-1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-500/30 border border-slate-700 hover:border-rose-500/40 text-[11px] text-slate-300 hover:text-rose-300 transition" title="Delete top tier">
+                                <i class="fa-solid fa-minus"></i> <span data-i18n="btn_del_tier">Del Tier</span>
                             </button>
-                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-sky-500/30 border border-slate-700 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-300 transition" title="상단에 새로운 층 추가">
-                                <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_tier">단 추가</span>
+                            <button onclick="changeSelectedRackTiers(1)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-sky-500/30 border border-slate-700 hover:border-sky-500/40 text-[11px] text-slate-300 hover:text-sky-300 transition" title="Add tier on top">
+                                <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_tier">Add Tier</span>
                             </button>
                         </div>
                     </div>
                     <div id="tier-buttons" class="flex flex-wrap gap-1"></div>
                     <div class="pt-1 border-t border-slate-800/80 flex items-center justify-between">
-                        <span class="text-[11px] text-slate-400" data-i18n="tier_add_item_hint">선택된 랙/단에 새 프로파일 적재</span>
+                        <span class="text-[11px] text-slate-400" data-i18n="tier_add_item_hint">Add a profile to the selected rack/tier</span>
                         <button onclick="openProfileModal('add')" class="px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition flex items-center gap-1 shadow">
-                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_item">품목 추가</span>
+                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_add_item">Add Item</span>
                         </button>
                     </div>
                 </div>
@@ -287,8 +287,8 @@
                     <div class="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center mb-4 text-2xl text-sky-400 kiosk-badge">
                         <i class="fa-solid fa-location-crosshairs"></i>
                     </div>
-                    <p class="font-medium text-slate-200 mb-1" data-i18n="empty_title">3D 공장 지도에서 랙(Rack) 선택</p>
-                    <p class="text-xs leading-relaxed" data-i18n="empty_desc">원하는 창고 구역을 클릭하면 해당 위치에 보관된<br>알루미늄 프로파일 규격과 재고 수량을 확인할 수 있습니다.</p>
+                    <p class="font-medium text-slate-200 mb-1" data-i18n="empty_title">Select a Rack on the 3D Map</p>
+                    <p class="text-xs leading-relaxed" data-i18n="empty_desc">Click any storage zone to view stored aluminum<br>profile specifications and live quantities.</p>
                 </div>
 
                 <!-- 동적 프로파일 카드가 여기에 렌더링됩니다 -->
@@ -298,11 +298,11 @@
             <!-- 하단 요약 푸터 -->
             <div class="p-4 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">
                 <div>
-                    <span data-i18n="summary_items">총 적재 품목: </span>
-                    <strong id="summary-item-count" class="text-white">0 종</strong>
+                    <span data-i18n="summary_items">Total Items: </span>
+                    <strong id="summary-item-count" class="text-white">0 types</strong>
                 </div>
                 <div>
-                    <span data-i18n="summary_qty">총 재고 수량: </span>
+                    <span data-i18n="summary_qty">Total Stock: </span>
                     <strong id="summary-total-qty" class="text-sky-400">0 EA</strong>
                 </div>
             </div>
@@ -319,17 +319,17 @@
                 <div class="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
                     <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
                         <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_types">총 프로파일 품종</span>
-                            <strong id="inv-kpi-types" class="text-lg font-bold text-white block">0 종</strong>
+                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_types">Profile Types</span>
+                            <strong id="inv-kpi-types" class="text-lg font-bold text-white block">0 types</strong>
                         </div>
                         <div class="w-9 h-9 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center">
                             <i class="fa-solid fa-layer-group"></i>
                         </div>
                     </div>
-                    <div onclick="setInvQuickFilter('multi')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="다중 위치 보관 품목 필터">
+                    <div onclick="setInvQuickFilter('multi')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="Filter multi-location profiles">
                         <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_multi">다중 위치 보관 (2곳+)</span>
-                            <strong id="inv-kpi-multi" class="text-lg font-bold text-indigo-400 block">0 종</strong>
+                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_multi">Multi-Location (2+)</span>
+                            <strong id="inv-kpi-multi" class="text-lg font-bold text-indigo-400 block">0 types</strong>
                         </div>
                         <div class="w-9 h-9 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center">
                             <i class="fa-solid fa-code-branch"></i>
@@ -337,17 +337,17 @@
                     </div>
                     <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
                         <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_qty">공장 전체 재고 합계</span>
+                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_qty">Total Factory Stock</span>
                             <strong id="inv-kpi-qty" class="text-lg font-bold text-emerald-400 block">0 EA</strong>
                         </div>
                         <div class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
                             <i class="fa-solid fa-cubes"></i>
                         </div>
                     </div>
-                    <div onclick="setInvQuickFilter('low')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="클릭하여 부족 주의 품목만 필터링">
+                    <div onclick="setInvQuickFilter('low')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="Filter low stock items">
                         <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_low">안전재고 미달 위치</span>
-                            <strong id="inv-kpi-low" class="text-lg font-bold text-amber-400 block">0 건</strong>
+                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_low">Low Stock Locations</span>
+                            <strong id="inv-kpi-low" class="text-lg font-bold text-amber-400 block">0 items</strong>
                         </div>
                         <div class="w-9 h-9 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
                             <i class="fa-solid fa-triangle-exclamation"></i>
@@ -360,49 +360,49 @@
                     <div class="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
                         <div class="relative flex-1 min-w-[180px] max-w-xs">
                             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                            <input type="text" id="inv-search-input" oninput="renderInventoryPage()" data-i18n-placeholder="inv_search_ph" placeholder="코드, 품목명, 길이, 색상, 구역 검색..."
+                            <input type="text" id="inv-search-input" oninput="renderInventoryPage()" data-i18n-placeholder="inv_search_ph" placeholder="Search code, name, length, color, rack..."
                                 class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400">
                         </div>
 
                         <select id="inv-filter-fac" onchange="renderInventoryPage()" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
-                            <option value="ALL" data-i18n="opt_all_fac">전체 동</option>
+                            <option value="ALL" data-i18n="opt_all_fac">All Facs</option>
                             <option value="Fac C">Fac C</option>
                             <option value="Fac A">Fac A</option>
                             <option value="Fac B">Fac B</option>
                         </select>
 
                         <select id="inv-filter-floor" onchange="renderInventoryPage()" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
-                            <option value="ALL" data-i18n="opt_all_floor">전체 층</option>
+                            <option value="ALL" data-i18n="opt_all_floor">All Floors</option>
                             <option value="GROUND">1F</option>
                             <option value="MEZZANINE">2F</option>
                         </select>
 
                         <div class="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-[11px]">
-                            <button id="inv-chip-all" onclick="setInvQuickFilter('all')" class="px-2.5 py-1 rounded-lg font-bold bg-sky-500 text-slate-950 transition" data-i18n="chip_all">전체</button>
-                            <button id="inv-chip-multi" onclick="setInvQuickFilter('multi')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_multi">다중보관</button>
-                            <button id="inv-chip-low" onclick="setInvQuickFilter('low')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_low">부족주의</button>
+                            <button id="inv-chip-all" onclick="setInvQuickFilter('all')" class="px-2.5 py-1 rounded-lg font-bold bg-sky-500 text-slate-950 transition" data-i18n="chip_all">All</button>
+                            <button id="inv-chip-multi" onclick="setInvQuickFilter('multi')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_multi">Multi-Loc</button>
+                            <button id="inv-chip-low" onclick="setInvQuickFilter('low')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_low">Low Stock</button>
                         </div>
                     </div>
 
                     <div class="flex items-center flex-wrap gap-1.5">
-                        <button onclick="toggleAllInventoryGroups(true)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_expand_all">모두 펼치기</button>
-                        <button onclick="toggleAllInventoryGroups(false)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_collapse_all">모두 접기</button>
+                        <button onclick="toggleAllInventoryGroups(true)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_expand_all">Expand All</button>
+                        <button onclick="toggleAllInventoryGroups(false)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_collapse_all">Collapse All</button>
                         <button onclick="exportToExcel()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition flex items-center gap-1" title="Export Excel (.xlsx)">
-                            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_export">엑셀 내보내기</span>
+                            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_export">Export Excel</span>
                         </button>
                         <button onclick="triggerExcelImport()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[11px] font-bold transition flex items-center gap-1" title="Import Excel (.xlsx, .xls, .csv)">
-                            <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_excel_import">엑셀 가져오기</span>
+                            <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_excel_import">Import Excel</span>
                         </button>
                         <button onclick="triggerJsonImport()" class="px-2.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold transition flex items-center gap-1" title="Import data.json">
-                            <i class="fa-solid fa-file-code"></i> <span data-i18n="btn_json_import">JSON 불러오기</span>
+                            <i class="fa-solid fa-file-code"></i> <span data-i18n="btn_json_import">Import JSON</span>
                         </button>
-                        <button onclick="reloadFromDataJson()" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition flex items-center gap-1" title="서버의 data.json 다시 불러오기">
-                            <i class="fa-solid fa-rotate"></i> <span data-i18n="btn_sync_json">JSON 동기화</span>
+                        <button onclick="reloadFromDataJson()" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition flex items-center gap-1" title="Reload data.json from server">
+                            <i class="fa-solid fa-rotate"></i> <span data-i18n="btn_sync_json">Sync JSON</span>
                         </button>
                         <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleExcelFileSelect(event)">
                         <input type="file" id="json-file-input" accept=".json" class="hidden" onchange="handleJsonFileSelect(event)">
                         <button onclick="openInventoryAddModal()" class="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition flex items-center gap-1 shadow">
-                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_inv_add">품목 입고</span>
+                            <i class="fa-solid fa-plus"></i> <span data-i18n="btn_inv_add">Stock In</span>
                         </button>
                     </div>
                 </div>
@@ -414,22 +414,22 @@
                     <thead class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wider">
                         <tr>
                             <th onclick="setInventorySort('code')" class="py-2.5 pl-4 pr-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-36">
-                                <span data-i18n="th_code">코드</span> <span id="sort-ind-code" class="text-sky-400 ml-0.5"></span>
+                                <span data-i18n="th_code">Code</span> <span id="sort-ind-code" class="text-sky-400 ml-0.5"></span>
                             </th>
                             <th onclick="setInventorySort('name')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white min-w-[180px]">
-                                <span data-i18n="th_name">프로파일 명</span> <span id="sort-ind-name" class="text-sky-400 ml-0.5">▲</span>
+                                <span data-i18n="th_name">Profile Name</span> <span id="sort-ind-name" class="text-sky-400 ml-0.5">▲</span>
                             </th>
                             <th onclick="setInventorySort('length')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-24">
-                                <span data-i18n="th_length">길이</span> <span id="sort-ind-length" class="text-sky-400 ml-0.5"></span>
+                                <span data-i18n="th_length">Length</span> <span id="sort-ind-length" class="text-sky-400 ml-0.5"></span>
                             </th>
                             <th onclick="setInventorySort('color')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-24">
-                                <span data-i18n="th_color">색상</span> <span id="sort-ind-color" class="text-sky-400 ml-0.5"></span>
+                                <span data-i18n="th_color">Color</span> <span id="sort-ind-color" class="text-sky-400 ml-0.5"></span>
                             </th>
-                            <th class="py-2.5 px-2 font-semibold min-w-[190px]" data-i18n="th_locations">보관 위치 (클릭 시 3D 확인)</th>
+                            <th class="py-2.5 px-2 font-semibold min-w-[190px]" data-i18n="th_locations">Locations (Click for 3D)</th>
                             <th onclick="setInventorySort('totalQty')" class="py-2.5 px-2 font-semibold text-right cursor-pointer hover:text-white whitespace-nowrap w-24">
-                                <span data-i18n="th_total">합계</span> <span id="sort-ind-totalQty" class="text-sky-400 ml-0.5"></span>
+                                <span data-i18n="th_total">Total</span> <span id="sort-ind-totalQty" class="text-sky-400 ml-0.5"></span>
                             </th>
-                            <th class="py-2.5 pl-2 pr-4 font-semibold text-right whitespace-nowrap w-28" data-i18n="th_actions">관리</th>
+                            <th class="py-2.5 pl-2 pr-4 font-semibold text-right whitespace-nowrap w-28" data-i18n="th_actions">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="inv-table-body" class="divide-y divide-slate-800/80"></tbody>
@@ -444,14 +444,14 @@
                     <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
                             <span class="text-xs font-bold text-sky-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-location-crosshairs"></i> <span data-i18n="preview_title">3D 보관 위치</span>
+                                <i class="fa-solid fa-location-crosshairs"></i> <span data-i18n="preview_title">3D Location</span>
                             </span>
-                            <span id="inv-preview-badge" class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-200 truncate">품목을 선택하세요</span>
+                            <span id="inv-preview-badge" class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-200 truncate">Select an item</span>
                         </div>
-                        <p id="inv-preview-sub" class="text-[11px] text-slate-400 truncate mt-0.5" data-i18n="preview_hint">테이블 행이나 보관 위치를 클릭하면 3D 지도에서 바로 표시됩니다.</p>
+                        <p id="inv-preview-sub" class="text-[11px] text-slate-400 truncate mt-0.5" data-i18n="preview_hint">Click a row or location chip to highlight it on the 3D map.</p>
                     </div>
-                    <button id="inv-preview-open-map-btn" onclick="openPreviewInFullMap()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-[11px] text-slate-200 hover:text-sky-300 font-medium transition shrink-0 flex items-center gap-1" title="3D 공장 지도 전체 화면으로 열기">
-                        <i class="fa-solid fa-up-right-from-square"></i> <span data-i18n="btn_open_full_map">크게</span>
+                    <button id="inv-preview-open-map-btn" onclick="openPreviewInFullMap()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-[11px] text-slate-200 hover:text-sky-300 font-medium transition shrink-0 flex items-center gap-1" title="Open in full 3D map">
+                        <i class="fa-solid fa-up-right-from-square"></i> <span data-i18n="btn_open_full_map">Expand</span>
                     </button>
                 </div>
 
@@ -459,10 +459,10 @@
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
                     <div id="inv-preview-locs" class="flex flex-wrap items-center gap-1"></div>
                     <div class="flex items-center gap-1 ml-auto bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
-                        <button onclick="setFloorFilter('ALL')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_short_all">전체</button>
+                        <button onclick="setFloorFilter('ALL')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition" data-i18n="floor_short_all">All</button>
                         <button onclick="setFloorFilter('GROUND')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition">1F</button>
                         <button onclick="setFloorFilter('MEZZANINE')" class="px-2 py-0.5 rounded text-slate-300 hover:bg-slate-800 transition">2F</button>
-                        <button onclick="resetPreviewCamera()" class="px-2 py-0.5 rounded text-sky-400 hover:bg-slate-800 transition" title="전체 공장 시점"><i class="fa-solid fa-compress"></i></button>
+                        <button onclick="resetPreviewCamera()" class="px-2 py-0.5 rounded text-sky-400 hover:bg-slate-800 transition" title="Full Factory View"><i class="fa-solid fa-compress"></i></button>
                     </div>
                 </div>
             </div>
@@ -477,14 +477,14 @@
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 id="rack-modal-title" class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-warehouse text-sky-400"></i> 새 랙(구역) 추가
+                    <i class="fa-solid fa-warehouse text-sky-400"></i> Add New Rack
                 </h3>
                 <button onclick="closeRackModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="p-5 space-y-3">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_fac">소속 동 (Facility)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_fac">Facility</label>
                         <select id="rack-form-fac" onchange="autoSuggestRackCode()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                             <option value="Fac C">Fac C</option>
                             <option value="Fac A">Fac A</option>
@@ -492,7 +492,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_floor">층수 (Floor)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_floor">Floor</label>
                         <select id="rack-form-floor" onchange="autoSuggestRackCode()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                             <option value="GROUND">GROUND (1F)</option>
                             <option value="MEZZANINE">MEZZANINE (2F)</option>
@@ -501,50 +501,50 @@
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_code">랙 코드 (ID / 라벨)</label>
-                        <input type="text" id="rack-form-code" placeholder="예: C-1F-E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_code">Rack Code (ID / Label)</label>
+                        <input type="text" id="rack-form-code" placeholder="e.g. C-1F-E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_tiers">단수 (Tiers: 1~10)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_tiers">Tiers (1~10)</label>
                         <input type="number" id="rack-form-tiers" min="1" max="10" value="4" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
                 <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_rack_name">랙 명칭</label>
-                    <input type="text" id="rack-form-name" placeholder="예: C-1F-E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_rack_name">Rack Name</label>
+                    <input type="text" id="rack-form-name" placeholder="e.g. C-1F-E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                 </div>
                 <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_rack_desc">상세 설명</label>
-                    <input type="text" id="rack-form-desc" placeholder="예: Fac C • 1F • E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_rack_desc">Description</label>
+                    <input type="text" id="rack-form-desc" placeholder="e.g. Fac C • 1F • E1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                 </div>
                 <div class="grid grid-cols-3 gap-2">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_w">가로 W (m)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_w">Width W (m)</label>
                         <input type="number" step="0.1" min="0.5" id="rack-form-w" value="2.0" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_d">깊이 D (m)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_d">Depth D (m)</label>
                         <input type="number" step="0.1" min="0.5" id="rack-form-d" value="8.0" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_h">높이 H (m)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_h">Height H (m)</label>
                         <input type="number" step="0.1" min="0.5" id="rack-form-h" value="2.8" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_x">X 좌표</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_x">X Coord</label>
                         <input type="number" step="0.5" id="rack-form-x" value="-14.0" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_z">Z 좌표</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_rack_z">Z Coord</label>
                         <input type="number" step="0.5" id="rack-form-z" value="3.5" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
             </div>
             <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
-                <button onclick="closeRackModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
-                <button onclick="saveRackModal()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_save">저장하기</button>
+                <button onclick="closeRackModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                <button onclick="saveRackModal()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_save">Save</button>
             </div>
         </div>
     </div>
@@ -554,63 +554,63 @@
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 id="profile-modal-title" class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-box-open text-sky-400"></i> 프로파일 품목 추가
+                    <i class="fa-solid fa-box-open text-sky-400"></i> Add Profile Item
                 </h3>
                 <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="p-5 space-y-3">
                 <div id="profile-form-rack-wrap">
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_rack">보관 랙 (Rack)</label>
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_rack">Storage Rack</label>
                     <select id="profile-form-rack" onchange="onProfileRackSelectChange()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_tier">적재 단수 (Tier)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_tier">Tier</label>
                         <select id="profile-form-tier" onchange="onProfileTierSelectChange()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_layer">위치 라벨 (Layer)</label>
-                        <input type="text" id="profile-form-layer" placeholder="예: 1단 (하단)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_layer">Layer Label</label>
+                        <input type="text" id="profile-form-layer" placeholder="e.g. L1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_code">프로파일 코드 *</label>
-                        <input type="text" id="profile-form-code" placeholder="예: AL-4040-S" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_code">Profile Code *</label>
+                        <input type="text" id="profile-form-code" placeholder="e.g. AL-4040-S" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_material">재질 (Material)</label>
-                        <input type="text" id="profile-form-material" placeholder="예: A6063-T5" value="A6063-T5" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_material">Material</label>
+                        <input type="text" id="profile-form-material" placeholder="e.g. A6063-T5" value="A6063-T5" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
                 <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_name">품목명 *</label>
-                    <input type="text" id="profile-form-name" placeholder="예: 표준 알루미늄 프로파일 40x40" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_name">Profile Name *</label>
+                    <input type="text" id="profile-form-name" placeholder="e.g. Standard Aluminum Profile 40x40" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_length">길이 (Length)</label>
-                        <input type="text" id="profile-form-length" placeholder="예: 6000mm" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_length">Length</label>
+                        <input type="text" id="profile-form-length" placeholder="e.g. 6000mm" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_color">색상 (Color)</label>
-                        <input type="text" id="profile-form-color" placeholder="예: 실버 / 블랙" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_color">Color</label>
+                        <input type="text" id="profile-form-color" placeholder="e.g. Silver / Black" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_qty">현재 재고 수량 (EA)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_qty">Current Quantity (EA)</label>
                         <input type="number" id="profile-form-qty" min="0" value="100" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_minqty">안전재고 기준 (EA)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_minqty">Safety Stock (EA)</label>
                         <input type="number" id="profile-form-minqty" min="0" value="30" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
             </div>
             <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
-                <button onclick="closeProfileModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
-                <button onclick="saveProfileModal()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_save">저장하기</button>
+                <button onclick="closeProfileModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                <button onclick="saveProfileModal()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_save">Save</button>
             </div>
         </div>
     </div>
@@ -620,7 +620,7 @@
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-truck-ramp-box text-sky-400"></i> <span data-i18n="modal_move_title">보관 위치 이동 / 분할 적재</span>
+                    <i class="fa-solid fa-truck-ramp-box text-sky-400"></i> <span data-i18n="modal_move_title">Move / Split Stock Location</span>
                 </h3>
                 <button onclick="closeMoveProfileModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -634,25 +634,25 @@
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_rack">이동할 랙 (Target Rack)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_rack">Target Rack</label>
                         <select id="move-target-rack" onchange="onMoveTargetRackChange()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                     <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_tier">이동할 단수 (Tier)</label>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_move_tier">Target Tier</label>
                         <select id="move-target-tier" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none"></select>
                     </div>
                 </div>
                 <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_move_qty">이동 수량 (EA) — 전체 이동 또는 일부 분할 이동</label>
+                    <label class="text-slate-400 block mb-1" data-i18n="modal_move_qty">Move Qty (EA) — Full or Partial</label>
                     <div class="flex items-center gap-2">
                         <input type="number" id="move-qty" min="1" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
-                        <button onclick="setMoveMaxQty()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold transition" data-i18n="btn_move_all">전량</button>
+                        <button onclick="setMoveMaxQty()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold transition" data-i18n="btn_move_all">Max</button>
                     </div>
                 </div>
             </div>
             <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
-                <button onclick="closeMoveProfileModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
-                <button onclick="confirmMoveProfile()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_move_exec">이동 실행</button>
+                <button onclick="closeMoveProfileModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                <button onclick="confirmMoveProfile()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_move_exec">Move Stock</button>
             </div>
         </div>
     </div>
@@ -662,35 +662,35 @@
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-file-excel text-emerald-400"></i> <span data-i18n="modal_excel_title">엑셀 파일 가져오기 (Import)</span>
+                    <i class="fa-solid fa-file-excel text-emerald-400"></i> <span data-i18n="modal_excel_title">Import Excel File</span>
                 </h3>
                 <button onclick="closeExcelImportModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="p-5 space-y-3">
                 <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-3 space-y-1.5">
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-400" data-i18n="modal_excel_file">선택된 파일:</span>
+                        <span class="text-slate-400" data-i18n="modal_excel_file">Selected File:</span>
                         <span id="excel-import-filename" class="font-mono font-bold text-sky-400 truncate max-w-[220px]">-</span>
                     </div>
                     <div class="flex items-center justify-between">
-                        <span class="text-slate-400" data-i18n="modal_excel_summary">파싱 결과:</span>
+                        <span class="text-slate-400" data-i18n="modal_excel_summary">Parsed Rows:</span>
                         <span id="excel-import-summary" class="font-bold text-emerald-400">-</span>
                     </div>
                 </div>
-                <p class="text-slate-300 leading-relaxed" data-i18n="modal_excel_desc">가져온 데이터를 현재 재고에 어떻게 반영할까요?</p>
+                <p class="text-slate-300 leading-relaxed" data-i18n="modal_excel_desc">How would you like to apply the imported Excel data?</p>
                 <div class="grid grid-cols-1 gap-2 pt-1">
                     <button onclick="applyExcelImport('replace')" class="w-full py-2.5 px-4 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-200 font-bold transition text-left flex items-center justify-between">
-                        <span><i class="fa-solid fa-arrows-rotate mr-2 text-rose-400"></i><span data-i18n="btn_excel_replace">전체 덮어쓰기 (기존 데이터 대체)</span></span>
+                        <span><i class="fa-solid fa-arrows-rotate mr-2 text-rose-400"></i><span data-i18n="btn_excel_replace">Replace All (Overwrite current inventory)</span></span>
                         <i class="fa-solid fa-chevron-right text-[10px]"></i>
                     </button>
                     <button onclick="applyExcelImport('merge')" class="w-full py-2.5 px-4 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-200 font-bold transition text-left flex items-center justify-between">
-                        <span><i class="fa-solid fa-layer-group mr-2 text-sky-400"></i><span data-i18n="btn_excel_merge">기존 데이터와 병합/업데이트</span></span>
+                        <span><i class="fa-solid fa-layer-group mr-2 text-sky-400"></i><span data-i18n="btn_excel_merge">Merge / Update existing inventory</span></span>
                         <i class="fa-solid fa-chevron-right text-[10px]"></i>
                     </button>
                 </div>
             </div>
             <div class="px-5 py-3 bg-slate-950/60 border-t border-slate-800 flex justify-end">
-                <button onclick="closeExcelImportModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
+                <button onclick="closeExcelImportModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
             </div>
         </div>
     </div>
@@ -699,12 +699,12 @@
     <div id="confirm-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden text-xs">
             <div class="p-5">
-                <h3 id="confirm-modal-title" class="text-base font-bold text-white mb-2">확인</h3>
+                <h3 id="confirm-modal-title" class="text-base font-bold text-white mb-2">Confirm</h3>
                 <p id="confirm-modal-desc" class="text-slate-300 leading-relaxed"></p>
             </div>
             <div class="px-5 py-3 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
-                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
-                <button id="confirm-modal-ok-btn" class="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold transition" data-i18n="btn_confirm">확인</button>
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                <button id="confirm-modal-ok-btn" class="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold transition" data-i18n="btn_confirm">Confirm</button>
             </div>
         </div>
     </div>
@@ -714,7 +714,7 @@
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-database text-emerald-400"></i> <span data-i18n="modal_sb_title">Supabase 실시간 클라우드 동기화</span>
+                    <i class="fa-solid fa-database text-emerald-400"></i> <span data-i18n="modal_sb_title">Supabase Real-Time Cloud Sync</span>
                 </h3>
                 <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -722,7 +722,7 @@
                 <div id="sb-modal-status-box" class="bg-slate-800/70 border border-slate-700 rounded-xl p-3 flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2 min-w-0">
                         <span id="sb-modal-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500 shrink-0"></span>
-                        <span id="sb-modal-status-msg" class="text-slate-200 font-medium truncate">연결 설정이 필요합니다.</span>
+                        <span id="sb-modal-status-msg" class="text-slate-200 font-medium truncate">Connecting...</span>
                     </div>
                     <span id="sb-modal-last-sync" class="text-[11px] text-slate-400 font-mono shrink-0">-</span>
                 </div>
@@ -734,49 +734,47 @@
 
                 <div>
                     <label class="text-slate-400 block mb-1" data-i18n="modal_sb_key">Supabase Anon / Publishable Key *</label>
-                    <input type="password" id="sb-form-key" placeholder="eyJhbGci... 또는 sb_publishable_..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                    <input type="password" id="sb-form-key" placeholder="eyJhbGci... or sb_publishable_..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_sb_table">테이블명 (Table)</label>
-                        <input type="text" id="sb-form-table" value="factory_inventory_state" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_sb_rowid">문서 ID (Row ID)</label>
-                        <input type="text" id="sb-form-rowid" value="main" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-emerald-400 focus:outline-none">
+                <div class="bg-slate-800/50 border border-slate-700/80 rounded-xl p-3 space-y-1.5">
+                    <div class="text-[11px] font-bold text-slate-300" data-i18n="modal_sb_schema_label">Normalized Database Tables (3NF)</div>
+                    <div class="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                        <span class="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-300">public.racks</span>
+                        <span class="px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300">public.profiles</span>
+                        <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">public.rack_inventory</span>
                     </div>
                 </div>
 
                 <label class="flex items-center justify-between bg-slate-800/50 border border-slate-700/80 rounded-xl px-3 py-2.5 cursor-pointer">
-                    <span class="text-slate-200 font-medium" data-i18n="modal_sb_autosync">수정 즉시 자동 서버 저장 및 실시간 수신 (Auto-Sync)</span>
+                    <span class="text-slate-200 font-medium" data-i18n="modal_sb_autosync">Auto-save edits &amp; receive real-time updates (Auto-Sync)</span>
                     <input type="checkbox" id="sb-form-autosync" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0">
                 </label>
 
                 <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2 text-[11px] text-slate-300">
                     <div class="flex items-center justify-between gap-2">
-                        <span class="font-bold text-sky-400"><i class="fa-solid fa-terminal mr-1"></i><span data-i18n="modal_sb_sql_title">1회 초기 테이블 생성 SQL (Supabase SQL Editor)</span></span>
+                        <span class="font-bold text-sky-400"><i class="fa-solid fa-terminal mr-1"></i><span data-i18n="modal_sb_sql_title">One-Time Table Setup SQL (Supabase SQL Editor)</span></span>
                         <button onclick="copySupabaseSql()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold transition shrink-0">
-                            <i class="fa-solid fa-copy mr-1"></i><span data-i18n="btn_copy_sql">SQL 복사</span>
+                            <i class="fa-solid fa-copy mr-1"></i><span data-i18n="btn_copy_sql">Copy SQL</span>
                         </button>
                     </div>
-                    <p class="text-slate-400 leading-relaxed" data-i18n="modal_sb_hint">모든 컴퓨터에서 별도 입력 없이 바로 연동되게 하려면, <code>app.js</code> 상단의 <code>DEFAULT_SUPABASE_CONFIG</code>에 URL과 Anon Key를 입력해 GitHub에 배포하세요.</p>
+                    <p class="text-slate-400 leading-relaxed" data-i18n="modal_sb_hint">To auto-connect every computer without typing credentials, enter URL &amp; Anon Key into DEFAULT_SUPABASE_CONFIG in app.js and deploy to GitHub.</p>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-1">
                     <button onclick="pullFromSupabaseManual()" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold transition flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-cloud-arrow-down text-sky-400"></i> <span data-i18n="btn_cloud_pull">서버 데이터 불러오기</span>
+                        <i class="fa-solid fa-cloud-arrow-down text-sky-400"></i> <span data-i18n="btn_cloud_pull">Pull from Cloud</span>
                     </button>
                     <button onclick="pushToSupabaseManual()" class="py-2 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold transition flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="btn_cloud_push">현재 데이터 서버 저장</span>
+                        <i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="btn_cloud_push">Save to Cloud Now</span>
                     </button>
                 </div>
             </div>
             <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between gap-2">
-                <button onclick="clearSupabaseOverrideConfig()" class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-medium transition" data-i18n="btn_sb_disconnect">설정 초기화</button>
+                <button onclick="clearSupabaseOverrideConfig()" class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-medium transition" data-i18n="btn_sb_disconnect">Reset Config</button>
                 <div class="flex items-center gap-2">
-                    <button onclick="closeSupabaseModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">취소</button>
-                    <button onclick="saveSupabaseConfigAndConnect()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition" data-i18n="btn_sb_connect">연결 저장 &amp; 동기화</button>
+                    <button onclick="closeSupabaseModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                    <button onclick="saveSupabaseConfigAndConnect()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition" data-i18n="btn_sb_connect">Save &amp; Sync</button>
                 </div>
             </div>
         </div>
@@ -784,16 +782,16 @@
 
     <!-- 호버 툴팁 (마우스 따라다니는 미니 정보창 - 3D 지도/인벤토리 프리뷰 공용) -->
     <div id="hover-tooltip" class="hidden fixed pointer-events-none z-40 bg-slate-900/95 border border-sky-400/60 text-white px-3 py-2 rounded-xl shadow-2xl text-xs backdrop-blur-md">
-        <div class="font-bold text-sky-400" id="tooltip-title">A-01 랙</div>
-        <div class="text-slate-300 mt-0.5" id="tooltip-desc">알루미늄 프로파일 3종 적재</div>
+        <div class="font-bold text-sky-400" id="tooltip-title">A-01 Rack</div>
+        <div class="text-slate-300 mt-0.5" id="tooltip-desc">3 profiles stored</div>
     </div>
 
     <!-- 알림 메시지 모달 (alert 대체) -->
     <div id="toast-msg" class="fixed bottom-6 right-6 bg-slate-800 border border-sky-500/50 text-white px-4 py-3 rounded-xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3 text-sm">
         <i class="fa-solid fa-circle-info text-sky-400"></i>
-        <span id="toast-text">메시지</span>
+        <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>
