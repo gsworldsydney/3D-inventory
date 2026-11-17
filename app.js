@@ -397,14 +397,17 @@ function canonicalizeBlocksForHash(arr) {
     }));
 }
 
-function computeDataHash(obj) {
-    const str = JSON.stringify(canonicalizeBlocksForHash(obj));
+function fnv1aHash(str) {
     let hash = 0x811c9dc5;
     for (let i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);
         hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
     }
     return hash.toString(16);
+}
+
+function computeDataHash(obj) {
+    return fnv1aHash(JSON.stringify(canonicalizeBlocksForHash(obj)));
 }
 
 let currentSourceHash = null;
@@ -627,10 +630,10 @@ const I18N = {
         modal_prof_rack: '보관 랙 (Rack)',
         modal_prof_tier: '적재 단수 (Level)',
         modal_prof_layer: '위치 라벨 (Layer)',
-        modal_prof_code: '프로파일 코드 *',
+        modal_prof_code: '프로파일 코드',
         modal_prof_material: '재질 (Material)',
         modal_prof_name: '품목명 *',
-        modal_prof_length: '길이 (Length)',
+        modal_prof_length: '길이 (mm)',
         modal_prof_color: '색상 (Color)',
         modal_prof_qty: '현재 재고 수량 (EA)',
         modal_prof_minqty: '안전재고 기준 (EA)',
@@ -782,10 +785,10 @@ const I18N = {
         modal_prof_rack: 'Storage Rack',
         modal_prof_tier: 'Level',
         modal_prof_layer: 'Layer Label',
-        modal_prof_code: 'Profile Code *',
+        modal_prof_code: 'Profile Code',
         modal_prof_material: 'Material',
         modal_prof_name: 'Profile Name *',
-        modal_prof_length: 'Length',
+        modal_prof_length: 'Length (mm)',
         modal_prof_color: 'Color',
         modal_prof_qty: 'Current Quantity (EA)',
         modal_prof_minqty: 'Safety Stock (EA)',
@@ -1973,7 +1976,7 @@ function renderSidePanel(data, activeTier = null) {
         card.innerHTML = `
             <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center flex-wrap gap-1.5 min-w-0">
-                    <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-700">${profile.code}</span>
+                    ${profile.code ? `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-700">${profile.code}</span>` : ''}
                     <span class="text-[11px] font-semibold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">${layerLabel}</span>
                 </div>
                 <div class="text-right shrink-0">
@@ -2043,6 +2046,28 @@ function getProfileLength(profile) {
     const src = `${profile.spec || ''} ${profile.name || ''}`;
     const match = src.match(/L\s*=\s*([^/)\s]+)/i);
     return match ? match[1] : (profile.spec || '');
+}
+
+function extractLengthNumber(val) {
+    const match = String(val ?? '').match(/(\d+(?:\.\d+)?)/);
+    return match ? match[1] : '';
+}
+
+function formatLengthMmValue(rawVal) {
+    const cleaned = String(rawVal ?? '').trim();
+    if (!cleaned) return '-';
+    const num = parseFloat(cleaned);
+    if (isNaN(num) || num < 0) return '-';
+    return `${num}mm`;
+}
+
+function getProfileGroupKey(profile) {
+    const rawCode = String((profile && profile.code) || '').trim();
+    if (rawCode) return rawCode.toUpperCase();
+    const rawName = String((profile && profile.name) || 'UNKNOWN').trim().toUpperCase();
+    const rawLen = String(getProfileLength(profile) || '').trim().toUpperCase();
+    const rawColor = String(getProfileColor(profile) || '').trim().toUpperCase();
+    return `__NO_CODE__::${rawName}::${rawLen}::${rawColor}`;
 }
 
 function getProfileColor(profile) {
@@ -2117,28 +2142,35 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
 
     if (mode === 'edit' && profileIdx !== null && data.profiles[profileIdx]) {
         const item = data.profiles[profileIdx];
-        titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-sky-400"></i> 프로파일 품목 수정`;
+        titleEl.innerHTML = currentLang === 'en'
+            ? `<i class="fa-solid fa-pen-to-square text-sky-400"></i> Edit Profile Item`
+            : `<i class="fa-solid fa-pen-to-square text-sky-400"></i> 프로파일 품목 수정`;
         populateProfileRackAndTierSelects(data.id, item.tier || 1);
-        document.getElementById('profile-form-layer').value = item.layer || `${item.tier || 1}단`;
+        document.getElementById('profile-form-layer').value = item.layer || formatTier(item.tier || 1);
         document.getElementById('profile-form-code').value = item.code || '';
         document.getElementById('profile-form-material').value = item.material || 'A6063-T5';
         document.getElementById('profile-form-name').value = item.name || '';
-        document.getElementById('profile-form-length').value = getProfileLength(item);
+        document.getElementById('profile-form-length').value = extractLengthNumber(getProfileLength(item));
         document.getElementById('profile-form-color').value = getProfileColor(item);
         document.getElementById('profile-form-qty').value = item.qty ?? 0;
         document.getElementById('profile-form-minqty').value = item.minQty ?? 0;
     } else {
         const defaultTier = (!overrideBlockId && selectedTier) ? selectedTier : 1;
+        const prefillLabel = prefillItem ? (prefillItem.code || prefillItem.name || '') : '';
         titleEl.innerHTML = prefillItem
-            ? `<i class="fa-solid fa-code-branch text-sky-400"></i> [${prefillItem.code}] 타 구역 추가 입고`
-            : `<i class="fa-solid fa-box-open text-sky-400"></i> 새 프로파일 품목 추가`;
+            ? (currentLang === 'en'
+                ? `<i class="fa-solid fa-code-branch text-sky-400"></i> Add Stock Location: [${prefillLabel}]`
+                : `<i class="fa-solid fa-code-branch text-sky-400"></i> [${prefillLabel}] 타 구역 추가 입고`)
+            : (currentLang === 'en'
+                ? `<i class="fa-solid fa-box-open text-sky-400"></i> Add New Profile Item`
+                : `<i class="fa-solid fa-box-open text-sky-400"></i> 새 프로파일 품목 추가`);
         populateProfileRackAndTierSelects(data.id, defaultTier);
         document.getElementById('profile-form-layer').value = formatTier(defaultTier);
         document.getElementById('profile-form-code').value = prefillItem ? (prefillItem.code || '') : '';
         document.getElementById('profile-form-material').value = prefillItem ? (prefillItem.material || 'A6063-T5') : 'A6063-T5';
         document.getElementById('profile-form-name').value = prefillItem ? (prefillItem.name || '') : '';
-        document.getElementById('profile-form-length').value = prefillItem ? (getProfileLength(prefillItem) || '6000mm') : '6000mm';
-        document.getElementById('profile-form-color').value = prefillItem ? (getProfileColor(prefillItem) || '실버') : '실버';
+        document.getElementById('profile-form-length').value = prefillItem ? (extractLengthNumber(getProfileLength(prefillItem)) || '6000') : '6000';
+        document.getElementById('profile-form-color').value = prefillItem ? (getProfileColor(prefillItem) || (currentLang === 'en' ? 'Silver' : '실버')) : (currentLang === 'en' ? 'Silver' : '실버');
         document.getElementById('profile-form-qty').value = 100;
         document.getElementById('profile-form-minqty').value = prefillItem ? (prefillItem.minQty ?? 30) : 30;
     }
@@ -2157,21 +2189,28 @@ function saveProfileModal() {
     if (!targetData) return;
 
     const tier = parseInt(document.getElementById('profile-form-tier').value) || 1;
-    const layer = document.getElementById('profile-form-layer').value.trim() || `${tier}단`;
+    const layer = document.getElementById('profile-form-layer').value.trim() || formatTier(tier);
     const code = document.getElementById('profile-form-code').value.trim();
     const material = document.getElementById('profile-form-material').value.trim() || 'A6063-T5';
     const name = document.getElementById('profile-form-name').value.trim();
-    const length = document.getElementById('profile-form-length').value.trim() || '-';
+    const rawLen = document.getElementById('profile-form-length').value.trim();
+    if (rawLen && (isNaN(Number(rawLen)) || Number(rawLen) < 0)) {
+        showToast(currentLang === 'en' ? 'Length must be a valid number in mm.' : '길이는 숫자(mm)만 입력해주세요.');
+        return;
+    }
+    const length = formatLengthMmValue(rawLen);
     const color = document.getElementById('profile-form-color').value.trim() || '-';
     const qty = Math.max(0, parseInt(document.getElementById('profile-form-qty').value) || 0);
     const minQty = Math.max(0, parseInt(document.getElementById('profile-form-minqty').value) || 0);
 
-    if (!code || !name) {
-        showToast("프로파일 코드와 품목명을 모두 입력해주세요.");
+    if (!name) {
+        showToast(currentLang === 'en' ? 'Please enter a Profile Name.' : '품목명을 입력해주세요.');
         return;
     }
 
     const profileObj = { tier, code, name, length, color, qty, minQty, layer, material };
+    const groupKey = getProfileGroupKey(profileObj);
+    const itemLabel = code || name;
 
     if (profileModalMode === 'edit' && origData && editingProfileIndex !== null && origData.profiles[editingProfileIndex]) {
         if (origData.id === targetData.id) {
@@ -2181,11 +2220,13 @@ function saveProfileModal() {
             targetData.profiles.push(profileObj);
             recalculateBlockStatus(origData);
         }
-        showToast(`품목 [${code}] 정보가 수정되었습니다.`);
+        showToast(currentLang === 'en' ? `Updated profile [${itemLabel}].` : `품목 [${itemLabel}] 정보가 수정되었습니다.`);
     } else {
         targetData.profiles.push(profileObj);
-        expandedInventoryCodes.add(code.toUpperCase());
-        showToast(`품목 [${code}]이(가) ${targetData.codeLabel} (${tier}단)에 추가되었습니다.`);
+        expandedInventoryCodes.add(groupKey);
+        showToast(currentLang === 'en'
+            ? `Added [${itemLabel}] to ${targetData.codeLabel} (${formatTier(tier)}).`
+            : `품목 [${itemLabel}]이(가) ${targetData.codeLabel} (${formatTier(tier)})에 추가되었습니다.`);
     }
 
     recalculateBlockStatus(targetData);
@@ -2196,7 +2237,7 @@ function saveProfileModal() {
     if (activeBlock) renderSidePanel(activeBlock, selectedTier);
     updateInventoryNavBadge();
     if (currentPage === 'inventory') {
-        previewProfileOn3D(code.toUpperCase(), targetData.id, (targetData.tiers || 1) > 1 ? tier : null);
+        previewProfileOn3D(groupKey, targetData.id, (targetData.tiers || 1) > 1 ? tier : null);
         renderInventoryPage();
     } else {
         applySelectionHighlight(selectedBlockId, selectedTier);
@@ -2210,9 +2251,13 @@ function deleteProfileItem(profileIdx, overrideBlockId = null) {
     if (!data || !data.profiles[profileIdx]) return;
 
     const targetItem = data.profiles[profileIdx];
+    const itemDesc = targetItem.code ? `[${targetItem.code}] '${targetItem.name}'` : `'${targetItem.name}'`;
+    const itemShort = targetItem.code || targetItem.name;
     openConfirmModal(
-        "품목 삭제 확인",
-        `[${data.codeLabel}]에서 [${targetItem.code}] '${targetItem.name}' 품목을 삭제하시겠습니까?`,
+        currentLang === 'en' ? 'Confirm Delete' : '품목 삭제 확인',
+        currentLang === 'en'
+            ? `Delete ${itemDesc} from [${data.codeLabel}]?`
+            : `[${data.codeLabel}]에서 ${itemDesc} 품목을 삭제하시겠습니까?`,
         () => {
             data.profiles.splice(profileIdx, 1);
             if (targetId === selectedBlockId) {
@@ -2225,7 +2270,7 @@ function deleteProfileItem(profileIdx, overrideBlockId = null) {
             if (activeBlock) renderSidePanel(activeBlock, selectedTier);
             updateInventoryNavBadge();
             if (currentPage === 'inventory') {
-                const codeKey = (targetItem.code || '').trim().toUpperCase();
+                const codeKey = getProfileGroupKey(targetItem);
                 const stillExists = getGroupedInventoryData().find(g => g.key === codeKey);
                 if (stillExists) {
                     previewProfileOn3D(codeKey);
@@ -2236,7 +2281,7 @@ function deleteProfileItem(profileIdx, overrideBlockId = null) {
             } else {
                 applySelectionHighlight(selectedBlockId, selectedTier);
             }
-            showToast(`품목 [${targetItem.code}]이(가) 삭제되었습니다.`);
+            showToast(currentLang === 'en' ? `Deleted [${itemShort}].` : `품목 [${itemShort}]이(가) 삭제되었습니다.`);
         }
     );
 }
@@ -2334,11 +2379,11 @@ function getGroupedInventoryData() {
 
     factoryBlocksData.forEach(block => {
         (block.profiles || []).forEach((profile, profileIdx) => {
-            const normKey = (profile.code || 'UNKNOWN').trim().toUpperCase();
+            const normKey = getProfileGroupKey(profile);
             if (!groupsMap.has(normKey)) {
                 groupsMap.set(normKey, {
                     key: normKey,
-                    code: profile.code,
+                    code: (profile.code || '').trim() || '-',
                     name: profile.name,
                     length: getProfileLength(profile) || '-',
                     color: getProfileColor(profile) || '-',
@@ -2873,7 +2918,7 @@ function invAdjustQty(blockId, profileIdx, delta) {
     item.qty = Math.max(0, (Number(item.qty) || 0) + delta);
     recalculateBlockStatus(data);
     saveFactoryData();
-    const normKey = (item.code || '').trim().toUpperCase();
+    const normKey = getProfileGroupKey(item);
     previewProfileOn3D(normKey, blockId, (data.tiers || 1) > 1 ? (item.tier || 1) : null);
     renderInventoryPage();
 }
@@ -2885,7 +2930,7 @@ function openMoveProfileModal(blockId, profileIdx) {
 
     moveSource = { blockId, profileIdx };
     const tierLabel = sourceData.tiers > 1 ? formatTier(item.tier || 1) : (currentLang === 'en' ? formatTier(item.tier || 1) : (item.layer || '1단'));
-    document.getElementById('move-item-code').textContent = item.code;
+    document.getElementById('move-item-code').textContent = item.code || '-';
     document.getElementById('move-item-source').textContent = currentLang === 'en'
         ? `Current: ${sourceData.codeLabel} · ${tierLabel} (${item.qty} EA)`
         : `현재 위치: ${sourceData.codeLabel} · ${tierLabel} (보유 ${item.qty} EA)`;
@@ -2957,9 +3002,10 @@ function confirmMoveProfile() {
         return;
     }
 
-    // 대상 랙/단에 동일 코드 품목이 이미 있으면 수량 합산, 없으면 새 항목 생성
+    // 대상 랙/단에 동일 품목이 이미 있으면 수량 합산, 없으면 새 항목 생성
+    const movedKey = getProfileGroupKey(item);
     const existingTarget = targetData.profiles.find(p =>
-        (p.code || '').trim().toUpperCase() === (item.code || '').trim().toUpperCase() &&
+        getProfileGroupKey(p) === movedKey &&
         (p.tier || 1) === targetTier
     );
 
@@ -2968,7 +3014,7 @@ function confirmMoveProfile() {
     } else {
         const cloned = JSON.parse(JSON.stringify(item));
         cloned.tier = targetTier;
-        cloned.layer = `${targetTier}단`;
+        cloned.layer = formatTier(targetTier);
         cloned.qty = moveQty;
         targetData.profiles.push(cloned);
     }
@@ -2981,7 +3027,6 @@ function confirmMoveProfile() {
 
     recalculateBlockStatus(sourceData);
     recalculateBlockStatus(targetData);
-    const movedKey = (item.code || '').trim().toUpperCase();
     expandedInventoryCodes.add(movedKey);
     saveFactoryData();
     closeMoveProfileModal();
@@ -2990,7 +3035,10 @@ function confirmMoveProfile() {
     if (activeBlock) renderSidePanel(activeBlock, selectedTier);
     previewProfileOn3D(movedKey, targetData.id, (targetData.tiers || 1) > 1 ? targetTier : null);
     renderInventoryPage();
-    showToast(`[${item.code}] ${moveQty.toLocaleString()} EA를 ${targetData.codeLabel} (${targetTier}단)으로 이동했습니다.`);
+    const movedLabel = item.code || item.name;
+    showToast(currentLang === 'en'
+        ? `Moved ${moveQty.toLocaleString()} EA of [${movedLabel}] to ${targetData.codeLabel} (${formatTier(targetTier)}).`
+        : `[${movedLabel}] ${moveQty.toLocaleString()} EA를 ${targetData.codeLabel} (${formatTier(targetTier)})으로 이동했습니다.`);
 }
 
 /**
@@ -3487,12 +3535,12 @@ document.getElementById('search-input').addEventListener('keypress', (e) => {
 
         const matchingBlocks = factoryBlocksData.filter(block => 
             block.codeLabel.toUpperCase().includes(query) || 
-            block.profiles.some(p => p.code.toUpperCase().includes(query) || p.name.toUpperCase().includes(query))
+            block.profiles.some(p => (p.code || '').toUpperCase().includes(query) || (p.name || '').toUpperCase().includes(query))
         );
 
         if (matchingBlocks.length > 0) {
             const foundBlock = matchingBlocks[0];
-            const matchedProfile = foundBlock.profiles.find(p => p.code.toUpperCase().includes(query) || p.name.toUpperCase().includes(query));
+            const matchedProfile = foundBlock.profiles.find(p => (p.code || '').toUpperCase().includes(query) || (p.name || '').toUpperCase().includes(query));
             const targetTier = (matchedProfile && matchedProfile.tier && (foundBlock.tiers || 1) > 1) ? matchedProfile.tier : null;
             selectBlock(foundBlock.id, true, targetTier);
             const tierInfo = targetTier ? ` (${targetTier}단)` : '';
@@ -3873,12 +3921,13 @@ function buildNormalizedPayloads(blocks) {
 
         (b.profiles || []).forEach(p => {
             const rawCode = String(p.code || '').trim();
-            if (!rawCode) return;
-            const upperKey = rawCode.toUpperCase();
-            if (!profileMap.has(upperKey)) {
-                profileMap.set(upperKey, {
-                    code: rawCode,
-                    name: String(p.name || rawCode).trim(),
+            const upperKey = getProfileGroupKey(p);
+            const dbCode = rawCode || `__AUTO__${fnv1aHash(upperKey)}`;
+            const canonicalKey = rawCode ? rawCode.toUpperCase() : upperKey;
+            if (!profileMap.has(canonicalKey)) {
+                profileMap.set(canonicalKey, {
+                    code: dbCode,
+                    name: String(p.name || rawCode || 'Unnamed Profile').trim(),
                     length: String(getProfileLength(p) || '-').trim() || '-',
                     color: String(getProfileColor(p) || '-').trim() || '-',
                     material: String(p.material || 'A6063-T5').trim() || 'A6063-T5',
@@ -3886,7 +3935,7 @@ function buildNormalizedPayloads(blocks) {
                     updated_at: now
                 });
             }
-            const canonicalCode = profileMap.get(upperKey).code;
+            const canonicalCode = profileMap.get(canonicalKey).code;
             if (!p._invId) p._invId = generateRowId();
 
             const tierNum = Math.max(1, parseInt(p.tier) || 1);
@@ -3923,11 +3972,13 @@ function assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows) {
         if (!inv || !inv.rack_id) return;
         if (!invByRackId.has(inv.rack_id)) invByRackId.set(inv.rack_id, []);
         const master = profileByUpperCode.get(String(inv.profile_code || '').trim().toUpperCase());
+        const rawDbCode = String(master ? master.code : inv.profile_code || '').trim();
+        const uiCode = rawDbCode.startsWith('__AUTO__') ? '' : rawDbCode;
         invByRackId.get(inv.rack_id).push({
             _invId: inv.id,
             tier: Number(inv.tier) || 1,
-            code: master ? master.code : inv.profile_code,
-            name: master ? master.name : inv.profile_code,
+            code: uiCode,
+            name: master ? master.name : uiCode,
             length: master ? master.length : '-',
             color: master ? master.color : '-',
             material: master ? master.material : 'A6063-T5',
