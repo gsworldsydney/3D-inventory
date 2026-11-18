@@ -546,6 +546,7 @@ const I18N = {
         btn_add_rack: '랙 추가',
         btn_full_view: '전체 뷰',
         btn_floor_plan: '평면도',
+        btn_3d_map: '3D Map',
         search_placeholder: '프로파일 코드 검색 (예: AL-4040)',
         edit_on: '배치 편집 ON',
         edit_off: '배치 편집 OFF',
@@ -596,13 +597,15 @@ const I18N = {
         kpi_types: '총 프로파일 품종',
         kpi_multi: '다중 위치 보관 (2곳+)',
         kpi_qty: '공장 전체 재고 합계',
-        kpi_low: '안전재고 미달 위치',
+        kpi_low: '총재고 알림 (경고/위험)',
         inv_search_ph: '코드, 품목명, 길이, 색상, 구역 검색...',
         opt_all_fac: '전체 동',
         opt_all_floor: '전체 층',
         chip_all: '전체',
         chip_multi: '다중보관',
-        chip_low: '부족주의',
+        chip_low: '전체알림',
+        chip_warning: '경고',
+        chip_danger: '위험',
         btn_expand_all: '모두 펼치기',
         btn_collapse_all: '모두 접기',
         btn_inv_add: '품목 입고',
@@ -611,8 +614,12 @@ const I18N = {
         th_length: '길이',
         th_color: '색상',
         th_locations: '보관 위치 (클릭 시 3D 확인)',
-        th_total: '합계',
+        th_total: '총 수량',
+        th_safety: '안전재고',
         th_actions: '관리',
+        badge_danger: '위험',
+        badge_warning: '경고',
+        badge_normal: '정상',
         preview_title: '3D 보관 위치',
         preview_hint: '테이블 행이나 보관 위치를 클릭하면 3D 지도에서 바로 표시됩니다.',
         btn_open_full_map: '크게',
@@ -657,8 +664,8 @@ const I18N = {
         unit_locs: '곳',
         single_tier_hint: '단일 층(1단) 적재 구역입니다. 우측 [+ 단 추가]로 다단 랙으로 전환할 수 있습니다.',
         all_locations_btn: '전체 위치 보기',
-        btn_excel_export: '엑셀 내보내기',
-        btn_excel_import: '엑셀 가져오기',
+        btn_excel_export: '내보내기',
+        btn_excel_import: '가져오기',
         modal_excel_title: '엑셀 파일 가져오기 (Import)',
         modal_excel_file: '선택된 파일:',
         modal_excel_summary: '파싱 결과:',
@@ -701,6 +708,7 @@ const I18N = {
         btn_add_rack: 'Add Rack',
         btn_full_view: 'Full View',
         btn_floor_plan: 'Floor Plan',
+        btn_3d_map: '3D Map',
         search_placeholder: 'Search profile code (e.g. AL-4040)',
         edit_on: 'Layout Edit ON',
         edit_off: 'Layout Edit OFF',
@@ -751,13 +759,15 @@ const I18N = {
         kpi_types: 'Profile Types',
         kpi_multi: 'Multi-Location (2+)',
         kpi_qty: 'Total Factory Stock',
-        kpi_low: 'Low Stock Locations',
+        kpi_low: 'Stock Alerts (Warn / Danger)',
         inv_search_ph: 'Search code, name, length, color, rack...',
         opt_all_fac: 'All Facs',
         opt_all_floor: 'All Floors',
         chip_all: 'All',
         chip_multi: 'Multi-Loc',
-        chip_low: 'Low Stock',
+        chip_low: 'Alerts',
+        chip_warning: 'Warning',
+        chip_danger: 'Danger',
         btn_expand_all: 'Expand All',
         btn_collapse_all: 'Collapse All',
         btn_inv_add: 'Stock In',
@@ -767,7 +777,11 @@ const I18N = {
         th_color: 'Color',
         th_locations: 'Locations (Click for 3D)',
         th_total: 'Total',
+        th_safety: 'Safety Stock',
         th_actions: 'Actions',
+        badge_danger: 'DANGER',
+        badge_warning: 'WARN',
+        badge_normal: 'OK',
         preview_title: '3D Location',
         preview_hint: 'Click a row or location chip to highlight it on the 3D map.',
         btn_open_full_map: 'Expand',
@@ -812,8 +826,8 @@ const I18N = {
         unit_locs: 'locs',
         single_tier_hint: 'Single-level zone. Click [+ Add Level] on the right to convert to multi-level.',
         all_locations_btn: 'All Locations',
-        btn_excel_export: 'Export Excel',
-        btn_excel_import: 'Import Excel',
+        btn_excel_export: 'Export',
+        btn_excel_import: 'Import',
         modal_excel_title: 'Import Excel File',
         modal_excel_file: 'Selected File:',
         modal_excel_summary: 'Parsed Rows:',
@@ -1698,6 +1712,7 @@ function autoSuggestRackCode() {
 }
 
 function openRackModal(mode) {
+    if (mode === 'add' && !requireAdminAccess()) return;
     rackModalMode = mode;
     const modal = document.getElementById('rack-modal');
     const titleEl = document.getElementById('rack-modal-title');
@@ -2229,6 +2244,7 @@ function saveProfileModal() {
             : `품목 [${itemLabel}]이(가) ${targetData.codeLabel} (${formatTier(tier)})에 추가되었습니다.`);
     }
 
+    syncProfileMinQtyAcrossBlocks(groupKey, minQty);
     recalculateBlockStatus(targetData);
     saveFactoryData();
     closeProfileModal();
@@ -2239,6 +2255,7 @@ function saveProfileModal() {
     if (currentPage === 'inventory') {
         previewProfileOn3D(groupKey, targetData.id, (targetData.tiers || 1) > 1 ? tier : null);
         renderInventoryPage();
+        notifyStockAlertForGroup(groupKey);
     } else {
         applySelectionHighlight(selectedBlockId, selectedTier);
     }
@@ -2317,6 +2334,7 @@ function switchPage(page) {
         subtitle.textContent = t('sub_inv');
         window.location.hash = 'inventory';
         renderInventoryPage();
+        notifyInventoryAlertsSummary();
 
         setTimeout(() => {
             onWindowResize();
@@ -2355,18 +2373,101 @@ function switchPage(page) {
     }
 }
 
+let invAlertBannerDismissed = false;
+
+function getStockAlertInfo(totalQty, safetyStock) {
+    const qty = Number(totalQty) || 0;
+    const min = Math.max(0, Number(safetyStock) || 0);
+    if (qty <= 0 || (min > 0 && qty <= Math.floor(min * 0.5))) {
+        return { level: 'danger', priority: 2 };
+    }
+    if (min > 0 && qty <= min) {
+        return { level: 'warning', priority: 1 };
+    }
+    return { level: 'normal', priority: 0 };
+}
+
+function syncProfileMinQtyAcrossBlocks(groupKey, newMinQty) {
+    const safeMin = Math.max(0, parseInt(newMinQty) || 0);
+    factoryBlocksData.forEach(block => {
+        let changed = false;
+        (block.profiles || []).forEach(p => {
+            if (getProfileGroupKey(p) === groupKey) {
+                p.minQty = safeMin;
+                changed = true;
+            }
+        });
+        if (changed) recalculateBlockStatus(block);
+    });
+}
+
+function notifyStockAlertForGroup(groupKey) {
+    const grp = getGroupedInventoryData().find(g => g.key === groupKey);
+    if (!grp || grp.alertLevel === 'normal') return false;
+    invAlertBannerDismissed = false;
+    const label = grp.code !== '-' ? grp.code : grp.name;
+    if (grp.alertLevel === 'danger') {
+        showToast(currentLang === 'en'
+            ? `DANGER: [${label}] Total ${grp.totalQty.toLocaleString()} EA (Safety: ${grp.safetyStock.toLocaleString()} EA)`
+            : `위험 알림: [${label}] 총 재고 ${grp.totalQty.toLocaleString()} EA (안전재고 ${grp.safetyStock.toLocaleString()} EA)`);
+    } else {
+        showToast(currentLang === 'en'
+            ? `WARNING: [${label}] Total ${grp.totalQty.toLocaleString()} EA (Safety: ${grp.safetyStock.toLocaleString()} EA)`
+            : `경고 알림: [${label}] 총 재고 ${grp.totalQty.toLocaleString()} EA (안전재고 ${grp.safetyStock.toLocaleString()} EA)`);
+    }
+    return true;
+}
+
+function notifyInventoryAlertsSummary() {
+    const groups = getGroupedInventoryData();
+    const dangerCount = groups.filter(g => g.alertLevel === 'danger').length;
+    const warningCount = groups.filter(g => g.alertLevel === 'warning').length;
+    if (dangerCount === 0 && warningCount === 0) return;
+    showToast(currentLang === 'en'
+        ? `Stock Alert: ${dangerCount} Danger, ${warningCount} Warning profile(s) below safety stock.`
+        : `재고 알림: 위험 ${dangerCount}종, 경고 ${warningCount}종이 안전재고 이하입니다.`);
+}
+
+function updateProfileSafetyStock(groupKey, rawVal) {
+    const safeMin = Math.max(0, parseInt(rawVal) || 0);
+    syncProfileMinQtyAcrossBlocks(groupKey, safeMin);
+    invAlertBannerDismissed = false;
+    saveFactoryData();
+    const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+    if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+    renderInventoryPage();
+    if (!notifyStockAlertForGroup(groupKey)) {
+        const grp = getGroupedInventoryData().find(g => g.key === groupKey);
+        const label = grp ? (grp.code !== '-' ? grp.code : grp.name) : '';
+        showToast(currentLang === 'en'
+            ? `Updated Safety Stock for [${label}] to ${safeMin.toLocaleString()} EA.`
+            : `[${label}] 안전재고가 ${safeMin.toLocaleString()} EA로 변경되었습니다.`);
+    }
+}
+
+function focusAlertGroupInInventory(groupKey) {
+    expandedInventoryCodes.add(groupKey);
+    previewProfileOn3D(groupKey);
+    renderInventoryPage();
+}
+
+function dismissInvAlertBanner() {
+    invAlertBannerDismissed = true;
+    renderInventoryPage();
+}
+
 function setInventorySort(key) {
     if (invSortKey === key) {
         invSortDir = (invSortDir === 'asc') ? 'desc' : 'asc';
     } else {
         invSortKey = key;
-        invSortDir = (key === 'totalQty') ? 'desc' : 'asc';
+        invSortDir = (key === 'totalQty' || key === 'safetyStock') ? 'desc' : 'asc';
     }
     renderInventoryPage();
 }
 
 function updateInventorySortIndicators() {
-    const keys = ['code', 'name', 'length', 'color', 'totalQty'];
+    const keys = ['code', 'name', 'length', 'color', 'totalQty', 'safetyStock'];
     keys.forEach(k => {
         const el = document.getElementById(`sort-ind-${k}`);
         if (!el) return;
@@ -2380,6 +2481,7 @@ function getGroupedInventoryData() {
     factoryBlocksData.forEach(block => {
         (block.profiles || []).forEach((profile, profileIdx) => {
             const normKey = getProfileGroupKey(profile);
+            const rawMinQty = (profile.minQty !== undefined && profile.minQty !== null) ? Math.max(0, Number(profile.minQty) || 0) : 0;
             if (!groupsMap.has(normKey)) {
                 groupsMap.set(normKey, {
                     key: normKey,
@@ -2389,17 +2491,18 @@ function getGroupedInventoryData() {
                     color: getProfileColor(profile) || '-',
                     material: profile.material || '-',
                     totalQty: 0,
+                    safetyStock: rawMinQty,
+                    alertLevel: 'normal',
+                    alertPriority: 0,
                     hasLow: false,
                     locations: []
                 });
             }
             const grp = groupsMap.get(normKey);
             const qty = Number(profile.qty) || 0;
-            const minQty = Number(profile.minQty) || 0;
-            const isLow = qty <= minQty;
+            if (rawMinQty > grp.safetyStock) grp.safetyStock = rawMinQty;
 
             grp.totalQty += qty;
-            if (isLow) grp.hasLow = true;
             grp.locations.push({
                 blockId: block.id,
                 codeLabel: block.codeLabel,
@@ -2413,17 +2516,24 @@ function getGroupedInventoryData() {
                 length: getProfileLength(profile) || '-',
                 color: getProfileColor(profile) || '-',
                 qty,
-                minQty,
-                isLow
+                minQty: rawMinQty,
+                isLow: qty <= rawMinQty
             });
         });
     });
 
     const list = Array.from(groupsMap.values());
+    list.forEach(grp => {
+        const alertInfo = getStockAlertInfo(grp.totalQty, grp.safetyStock);
+        grp.alertLevel = alertInfo.level;
+        grp.alertPriority = alertInfo.priority;
+        grp.hasLow = alertInfo.level !== 'normal';
+    });
+
     const dir = invSortDir === 'asc' ? 1 : -1;
     list.sort((a, b) => {
-        if (invSortKey === 'totalQty') {
-            return (a.totalQty - b.totalQty) * dir;
+        if (invSortKey === 'totalQty' || invSortKey === 'safetyStock') {
+            return (a[invSortKey] - b[invSortKey]) * dir;
         }
         const va = String(a[invSortKey] || '');
         const vb = String(b[invSortKey] || '');
@@ -2438,22 +2548,41 @@ function updateInventoryNavBadge() {
     const groups = getGroupedInventoryData();
     const badge = document.getElementById('nav-inv-count');
     if (badge) badge.textContent = groups.length;
+
+    const alertBadge = document.getElementById('nav-inv-alert-badge');
+    if (alertBadge) {
+        const dangerCount = groups.filter(g => g.alertLevel === 'danger').length;
+        const warningCount = groups.filter(g => g.alertLevel === 'warning').length;
+        const totalAlerts = dangerCount + warningCount;
+        if (totalAlerts > 0) {
+            alertBadge.textContent = dangerCount > 0 ? `! ${totalAlerts}` : `${totalAlerts}`;
+            alertBadge.className = dangerCount > 0
+                ? 'px-1.5 py-0.2 rounded-md bg-rose-500/25 border border-rose-500/50 text-rose-300 text-[10px] font-bold animate-pulse'
+                : 'px-1.5 py-0.2 rounded-md bg-amber-500/25 border border-amber-500/50 text-amber-300 text-[10px] font-bold';
+            alertBadge.title = currentLang === 'en'
+                ? `${dangerCount} Danger, ${warningCount} Warning stock alert(s)`
+                : `위험 ${dangerCount}종, 경고 ${warningCount}종 재고 알림`;
+        } else {
+            alertBadge.className = 'hidden px-1.5 py-0.2 rounded-md text-[10px] font-bold';
+            alertBadge.textContent = '';
+        }
+    }
 }
 
 function setInvQuickFilter(mode) {
     invQuickFilter = mode;
-    const chips = {
-        all: document.getElementById('inv-chip-all'),
-        multi: document.getElementById('inv-chip-multi'),
-        low: document.getElementById('inv-chip-low')
+    const chipStyles = {
+        all: ['bg-sky-500 text-slate-950 font-bold', 'text-slate-300 hover:text-white font-medium'],
+        multi: ['bg-sky-500 text-slate-950 font-bold', 'text-slate-300 hover:text-white font-medium'],
+        low: ['bg-sky-500 text-slate-950 font-bold', 'text-slate-300 hover:text-white font-medium'],
+        warning: ['bg-amber-500 text-slate-950 font-bold', 'text-amber-300 hover:text-amber-200 font-medium'],
+        danger: ['bg-rose-500 text-white font-bold', 'text-rose-300 hover:text-rose-200 font-medium']
     };
-    Object.entries(chips).forEach(([key, el]) => {
+    Object.keys(chipStyles).forEach(key => {
+        const el = document.getElementById(`inv-chip-${key}`);
         if (!el) return;
-        if (key === mode) {
-            el.className = 'px-2.5 py-1 rounded-lg font-bold bg-sky-500 text-slate-950 transition';
-        } else {
-            el.className = 'px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition';
-        }
+        const stateCls = key === mode ? chipStyles[key][0] : chipStyles[key][1];
+        el.className = `px-2.5 py-1 rounded-lg transition ${stateCls}`;
     });
     renderInventoryPage();
 }
@@ -2681,25 +2810,102 @@ function openPreviewInFullMap() {
     }
 }
 
+function escapeHtml(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function escapeJsAttr(str) {
+    return String(str ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;');
+}
+
+function renderInventoryAlertBanner(dangerGroups, warningGroups) {
+    const banner = document.getElementById('inv-alert-banner');
+    if (!banner) return;
+
+    const totalAlerts = dangerGroups.length + warningGroups.length;
+    if (totalAlerts === 0 || invAlertBannerDismissed) {
+        banner.className = 'hidden rounded-xl border px-3.5 py-2.5 text-xs space-y-1.5';
+        banner.innerHTML = '';
+        return;
+    }
+
+    const hasDanger = dangerGroups.length > 0;
+    banner.className = hasDanger
+        ? 'rounded-xl border border-rose-500/40 bg-rose-950/35 px-3.5 py-2.5 text-xs space-y-2'
+        : 'rounded-xl border border-amber-500/40 bg-amber-950/30 px-3.5 py-2.5 text-xs space-y-2';
+
+    const titleText = currentLang === 'en'
+        ? `Total Stock Safety Alert — ${dangerGroups.length} Danger, ${warningGroups.length} Warning`
+        : `총재고 안전재고 알림 — 위험 ${dangerGroups.length}종, 경고 ${warningGroups.length}종`;
+
+    banner.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 font-bold ${hasDanger ? 'text-rose-300' : 'text-amber-300'}">
+                <i class="fa-solid ${hasDanger ? 'fa-circle-exclamation animate-pulse' : 'fa-triangle-exclamation'}"></i>
+                <span>${titleText}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                ${dangerGroups.length > 0 ? `<button onclick="setInvQuickFilter('danger')" class="px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/35 border border-rose-500/40 text-rose-200 text-[11px] font-bold transition">${currentLang === 'en' ? `Danger (${dangerGroups.length})` : `위험 (${dangerGroups.length})`}</button>` : ''}
+                ${warningGroups.length > 0 ? `<button onclick="setInvQuickFilter('warning')" class="px-2 py-0.5 rounded-md bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-200 text-[11px] font-bold transition">${currentLang === 'en' ? `Warning (${warningGroups.length})` : `경고 (${warningGroups.length})`}</button>` : ''}
+                <button onclick="dismissInvAlertBanner()" class="px-1.5 py-0.5 rounded text-slate-400 hover:text-white transition" title="Hide alert banner"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+        <div id="inv-alert-banner-chips" class="flex flex-wrap items-center gap-1.5"></div>
+    `;
+
+    const chipsContainer = document.getElementById('inv-alert-banner-chips');
+    const appendAlertChips = (list, level) => {
+        list.forEach(grp => {
+            const btn = document.createElement('button');
+            const label = grp.code !== '-' ? grp.code : grp.name;
+            const locSuffix = grp.locations.length > 1 ? ` · ${grp.locations.length}${t('unit_locs')}` : '';
+            btn.className = level === 'danger'
+                ? 'px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/35 border border-rose-500/40 text-rose-200 text-[11px] font-medium transition inline-flex items-center gap-1'
+                : 'px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[11px] font-medium transition inline-flex items-center gap-1';
+            btn.innerHTML = `<span class="font-bold">${level === 'danger' ? t('badge_danger') : t('badge_warning')}</span> <span class="font-mono font-bold">${escapeHtml(label)}</span> <span class="opacity-85">(${grp.totalQty}/${grp.safetyStock} EA${locSuffix})</span>`;
+            btn.onclick = () => focusAlertGroupInInventory(grp.key);
+            chipsContainer.appendChild(btn);
+        });
+    };
+    appendAlertChips(dangerGroups, 'danger');
+    appendAlertChips(warningGroups, 'warning');
+}
+
 function renderInventoryPage() {
     updateInventoryNavBadge();
     updateInventorySortIndicators();
     const allGroups = getGroupedInventoryData();
 
-    // 전체 KPI 갱신
-    let totalFactoryQty = 0;
-    let multiLocationCount = 0;
-    let lowLocationCount = 0;
+    // 전체 KPI 갱신 (프로파일 TOTAL vs 안전재고 기준 경고/위험 집계)
+    const dangerGroups = [];
+    const warningGroups = [];
     allGroups.forEach(g => {
-        totalFactoryQty += g.totalQty;
-        if (g.locations.length > 1) multiLocationCount++;
-        g.locations.forEach(loc => { if (loc.isLow) lowLocationCount++; });
+        if (g.alertLevel === 'danger') dangerGroups.push(g);
+        else if (g.alertLevel === 'warning') warningGroups.push(g);
     });
 
-    document.getElementById('inv-kpi-types').textContent = `${allGroups.length} ${t('unit_types')}`;
-    document.getElementById('inv-kpi-multi').textContent = `${multiLocationCount} ${t('unit_types')}`;
-    document.getElementById('inv-kpi-qty').textContent = `${totalFactoryQty.toLocaleString()} EA`;
-    document.getElementById('inv-kpi-low').textContent = `${lowLocationCount} ${t('unit_cases')}`;
+    const kpiLowEl = document.getElementById('inv-kpi-low');
+    const alertTotalCount = dangerGroups.length + warningGroups.length;
+    if (alertTotalCount === 0) {
+        kpiLowEl.textContent = currentLang === 'en' ? '0 alerts' : '알림 0건';
+        kpiLowEl.className = 'text-sm sm:text-base font-bold text-emerald-400 block';
+    } else {
+        kpiLowEl.textContent = currentLang === 'en'
+            ? `${dangerGroups.length} Danger · ${warningGroups.length} Warn`
+            : `위험 ${dangerGroups.length} · 경고 ${warningGroups.length}`;
+        kpiLowEl.className = dangerGroups.length > 0
+            ? 'text-sm sm:text-base font-bold text-rose-400 block'
+            : 'text-sm sm:text-base font-bold text-amber-400 block';
+    }
+
+    renderInventoryAlertBanner(dangerGroups, warningGroups);
 
     const query = (document.getElementById('inv-search-input').value || '').trim().toUpperCase();
     const facFilter = document.getElementById('inv-filter-fac').value;
@@ -2714,7 +2920,9 @@ function renderInventoryPage() {
 
         if (matchingLocs.length === 0) return null;
         if (invQuickFilter === 'multi' && grp.locations.length < 2) return null;
-        if (invQuickFilter === 'low' && !matchingLocs.some(l => l.isLow)) return null;
+        if (invQuickFilter === 'low' && grp.alertLevel === 'normal') return null;
+        if (invQuickFilter === 'warning' && grp.alertLevel !== 'warning') return null;
+        if (invQuickFilter === 'danger' && grp.alertLevel !== 'danger') return null;
 
         if (query) {
             const groupMatch =
@@ -2743,7 +2951,7 @@ function renderInventoryPage() {
     if (filteredGroups.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="py-16 text-center text-slate-400 text-sm">
+                <td colspan="8" class="py-16 text-center text-slate-400 text-sm">
                     <i class="fa-solid fa-box-open text-3xl text-slate-600 mb-3 block"></i>
                     ${currentLang === 'en' ? 'No matching profile items found.' : '조건에 일치하는 프로파일 재고 항목이 없습니다.'}
                 </td>
@@ -2756,12 +2964,19 @@ function renderInventoryPage() {
         const isMulti = grp.locations.length > 1;
         const isExpanded = expandedInventoryCodes.has(grp.key) || Boolean(query);
         const isPreviewed = previewedProfileKey === grp.key;
+        const jsKey = escapeJsAttr(grp.key);
+
+        const rowAlertBg = grp.alertLevel === 'danger'
+            ? 'border-l-4 border-l-rose-500 bg-rose-500/[0.06] hover:bg-rose-500/[0.11]'
+            : (grp.alertLevel === 'warning'
+                ? 'border-l-4 border-l-amber-500 bg-amber-500/[0.05] hover:bg-amber-500/[0.10]'
+                : 'hover:bg-slate-900/80');
 
         const mainTr = document.createElement('tr');
         mainTr.className = `cursor-pointer transition ${
             isPreviewed
-                ? 'bg-sky-500/10 hover:bg-sky-500/15'
-                : 'hover:bg-slate-900/80'
+                ? `bg-sky-500/10 hover:bg-sky-500/15 ${grp.alertLevel === 'danger' ? 'border-l-4 border-l-rose-500' : (grp.alertLevel === 'warning' ? 'border-l-4 border-l-amber-500' : '')}`
+                : rowAlertBg
         }`;
         mainTr.onclick = () => toggleInventoryGroup(grp.key);
 
@@ -2770,52 +2985,89 @@ function renderInventoryPage() {
             const tText = tVal ? ` · ${formatTier(tVal)}` : '';
             const isChipFocused = isPreviewed && previewFocusLocation && previewFocusLocation.blockId === loc.blockId && (tVal === null || previewFocusLocation.tier === tVal);
             return `
-                <button onclick="event.stopPropagation(); previewProfileOn3D('${grp.key}', '${loc.blockId}', ${tVal === null ? 'null' : tVal}); renderInventoryPage();"
+                <button onclick="event.stopPropagation(); previewProfileOn3D('${jsKey}', '${escapeJsAttr(loc.blockId)}', ${tVal === null ? 'null' : tVal}); renderInventoryPage();"
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition border ${
                         isChipFocused
                             ? 'bg-rose-500/25 border-rose-400 text-rose-200'
-                            : (loc.isLow
-                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20'
-                                : 'bg-slate-800 border-slate-700 text-slate-200 hover:border-sky-400 hover:text-sky-300')
+                            : 'bg-slate-800 border-slate-700 text-slate-200 hover:border-sky-400 hover:text-sky-300'
                     }">
                     <i class="fa-solid fa-location-dot text-[9px] text-sky-400"></i>
-                    <span class="font-mono font-bold">${loc.codeLabel}${tText}</span>
+                    <span class="font-mono font-bold">${escapeHtml(loc.codeLabel)}${escapeHtml(tText)}</span>
                     <span class="text-slate-400">(${loc.qty.toLocaleString()})</span>
                 </button>
             `;
         }).join('');
 
+        const totalQtyColor = grp.alertLevel === 'danger'
+            ? 'text-rose-400'
+            : (grp.alertLevel === 'warning' ? 'text-amber-400' : 'text-emerald-400');
+
+        const statusPillHtml = grp.alertLevel === 'danger'
+            ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold"><i class="fa-solid fa-circle-exclamation text-[9px]"></i> ${t('badge_danger')}</span>`
+            : (grp.alertLevel === 'warning'
+                ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold"><i class="fa-solid fa-triangle-exclamation text-[9px]"></i> ${t('badge_warning')}</span>`
+                : `<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">${t('badge_normal')}</span>`);
+
+        const filteredNote = (grp.filteredTotalQty !== grp.totalQty)
+            ? `<div class="text-[10px] text-slate-400">${currentLang === 'en' ? 'All' : '전체'}: ${grp.totalQty.toLocaleString()}</div>`
+            : '';
+
         mainTr.innerHTML = `
             <td class="py-2.5 pl-4 pr-2 align-middle whitespace-nowrap">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-chevron-${isExpanded ? 'down' : 'right'} text-slate-500 text-[10px] w-2.5"></i>
-                    <span class="font-mono font-bold text-sky-400 bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-md text-[11px]">${grp.code}</span>
+                    <span class="font-mono font-bold text-sky-400 bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-md text-[11px]">${escapeHtml(grp.code)}</span>
                     ${isMulti ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${grp.locations.length}${t('unit_locs')}</span>` : ''}
                 </div>
             </td>
             <td class="py-2.5 px-2 align-middle font-semibold text-slate-100">
-                <div class="truncate max-w-[260px]" title="${grp.name}">${grp.name}</div>
+                <div class="truncate max-w-[240px]" title="${escapeHtml(grp.name)}">${escapeHtml(grp.name)}</div>
             </td>
-            <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300 font-mono">${grp.length}</td>
-            <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300">${grp.color}</td>
+            <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300 font-mono">${escapeHtml(grp.length)}</td>
+            <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300">${escapeHtml(grp.color)}</td>
             <td class="py-2.5 px-2 align-middle">
                 <div class="flex flex-wrap items-center gap-1">${locationChipsHtml}</div>
             </td>
             <td class="py-2.5 px-2 align-middle text-right whitespace-nowrap">
-                <strong class="font-mono text-sm font-bold ${grp.hasLow ? 'text-amber-400' : 'text-emerald-400'}">${grp.filteredTotalQty.toLocaleString()}</strong>
-                <span class="text-[10px] text-slate-400">EA</span>
+                <div class="inline-flex items-center justify-end gap-1.5">
+                    ${statusPillHtml}
+                    <div>
+                        <strong class="font-mono text-sm font-bold ${totalQtyColor}">${grp.filteredTotalQty.toLocaleString()}</strong>
+                        <span class="text-[10px] text-slate-400">EA</span>
+                    </div>
+                </div>
+                ${filteredNote}
+            </td>
+            <td class="py-2.5 px-2 align-middle text-right whitespace-nowrap">
+                <div class="inline-flex items-center justify-end gap-1">
+                    <input type="number" min="0" value="${grp.safetyStock}" class="inv-safety-input w-16 bg-slate-900 border ${grp.alertLevel === 'danger' ? 'border-rose-500/50' : (grp.alertLevel === 'warning' ? 'border-amber-500/50' : 'border-slate-700')} rounded-lg px-2 py-1 text-right font-mono text-xs text-white focus:border-sky-400 focus:outline-none">
+                    <span class="text-[10px] text-slate-400">EA</span>
+                </div>
             </td>
             <td class="py-2.5 pl-2 pr-4 align-middle text-right whitespace-nowrap">
                 <div class="inline-flex items-center gap-1">
-                    <button onclick="event.stopPropagation(); previewProfileOn3D('${grp.key}'); renderInventoryPage();" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-sky-300 text-[11px] font-medium transition">
+                    <button onclick="event.stopPropagation(); previewProfileOn3D('${jsKey}'); renderInventoryPage();" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-sky-300 text-[11px] font-medium transition">
                         <i class="fa-solid fa-crosshairs"></i>
                     </button>
-                    <button onclick="event.stopPropagation(); openInventoryAddLocationForCode('${grp.key}')" class="px-2 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 text-[11px] font-bold transition">
+                    <button onclick="event.stopPropagation(); openInventoryAddLocationForCode('${jsKey}')" class="px-2 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 text-[11px] font-bold transition">
                         <i class="fa-solid fa-plus"></i> ${t('btn_stock_in')}
                     </button>
                 </div>
             </td>
         `;
+
+        const safetyInput = mainTr.querySelector('.inv-safety-input');
+        if (safetyInput) {
+            safetyInput.onclick = (e) => e.stopPropagation();
+            safetyInput.onchange = (e) => updateProfileSafetyStock(grp.key, e.target.value);
+            safetyInput.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.target.blur();
+                }
+            };
+        }
+
         tbody.appendChild(mainTr);
 
         if (isExpanded) {
@@ -2823,6 +3075,7 @@ function renderInventoryPage() {
                 const floorLabel = loc.floor === 'MEZZANINE' ? '2F' : '1F';
                 const tierBadge = loc.tiers > 1 ? formatTier(loc.tier) : (currentLang === 'en' ? formatTier(loc.tier || 1) : loc.layer);
                 const tVal = loc.tiers > 1 ? loc.tier : null;
+                const sharePct = grp.totalQty > 0 ? Math.round((loc.qty / grp.totalQty) * 100) : 0;
 
                 const subTr = document.createElement('tr');
                 subTr.className = 'bg-slate-900/40 hover:bg-slate-900/80 text-[11px] transition';
@@ -2830,41 +3083,44 @@ function renderInventoryPage() {
                     <td class="py-2 pl-9 pr-2 align-middle whitespace-nowrap text-slate-400">
                         <span class="inline-flex items-center gap-1 text-slate-400">
                             <i class="fa-solid fa-turn-up fa-rotate-90 text-[9px] text-slate-600"></i>
-                            ${loc.fac} · ${floorLabel}
+                            ${escapeHtml(loc.fac)} · ${floorLabel}
                         </span>
                     </td>
                     <td class="py-2 px-2 align-middle whitespace-nowrap">
                         <div class="inline-flex items-center gap-1.5">
-                            <button onclick="previewProfileOn3D('${grp.key}', '${loc.blockId}', ${tVal === null ? 'null' : tVal}); renderInventoryPage();"
+                            <button onclick="previewProfileOn3D('${jsKey}', '${escapeJsAttr(loc.blockId)}', ${tVal === null ? 'null' : tVal}); renderInventoryPage();"
                                 class="px-2 py-0.5 rounded bg-slate-800 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400 text-sky-300 font-mono font-bold transition">
-                                ${loc.codeLabel}
+                                ${escapeHtml(loc.codeLabel)}
                             </button>
-                            <span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-medium">${tierBadge}</span>
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-medium">${escapeHtml(tierBadge)}</span>
                         </div>
                     </td>
-                    <td class="py-2 px-2 align-middle whitespace-nowrap text-slate-300 font-mono">${loc.length}</td>
-                    <td class="py-2 px-2 align-middle whitespace-nowrap text-slate-300">${loc.color}</td>
+                    <td class="py-2 px-2 align-middle whitespace-nowrap text-slate-300 font-mono">${escapeHtml(loc.length)}</td>
+                    <td class="py-2 px-2 align-middle whitespace-nowrap text-slate-300">${escapeHtml(loc.color)}</td>
                     <td class="py-2 px-2 align-middle">
                         <div class="inline-flex items-center gap-1">
-                            <button onclick="invAdjustQty('${loc.blockId}', ${loc.profileIdx}, -10)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">-10</button>
-                            <button onclick="invAdjustQty('${loc.blockId}', ${loc.profileIdx}, -1)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">-1</button>
-                            <button onclick="invAdjustQty('${loc.blockId}', ${loc.profileIdx}, 1)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">+1</button>
-                            <button onclick="invAdjustQty('${loc.blockId}', ${loc.profileIdx}, 10)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">+10</button>
+                            <button onclick="invAdjustQty('${escapeJsAttr(loc.blockId)}', ${loc.profileIdx}, -10)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">-10</button>
+                            <button onclick="invAdjustQty('${escapeJsAttr(loc.blockId)}', ${loc.profileIdx}, -1)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">-1</button>
+                            <button onclick="invAdjustQty('${escapeJsAttr(loc.blockId)}', ${loc.profileIdx}, 1)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">+1</button>
+                            <button onclick="invAdjustQty('${escapeJsAttr(loc.blockId)}', ${loc.profileIdx}, 10)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-slate-300">+10</button>
                         </div>
                     </td>
                     <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
-                        <span class="font-mono font-bold ${loc.isLow ? 'text-amber-400' : 'text-emerald-400'}">${loc.qty.toLocaleString()}</span>
+                        <span class="font-mono font-bold ${loc.qty <= 0 ? 'text-rose-400' : 'text-slate-200'}">${loc.qty.toLocaleString()}</span>
                         <span class="text-[10px] text-slate-500">EA</span>
+                    </td>
+                    <td class="py-2 px-2 align-middle text-right whitespace-nowrap text-slate-500 font-mono">
+                        ${sharePct}%
                     </td>
                     <td class="py-2 pl-2 pr-4 align-middle text-right whitespace-nowrap">
                         <div class="inline-flex items-center gap-1">
-                            <button onclick="openMoveProfileModal('${loc.blockId}', ${loc.profileIdx})" class="px-2 py-0.5 rounded bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition">
+                            <button onclick="openMoveProfileModal('${escapeJsAttr(loc.blockId)}', ${loc.profileIdx})" class="px-2 py-0.5 rounded bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition">
                                 ${t('btn_move')}
                             </button>
-                            <button onclick="openProfileModal('edit', ${loc.profileIdx}, '${loc.blockId}')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                            <button onclick="openProfileModal('edit', ${loc.profileIdx}, '${escapeJsAttr(loc.blockId)}')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
                                 ${t('btn_edit')}
                             </button>
-                            <button onclick="deleteProfileItem(${loc.profileIdx}, '${loc.blockId}')" class="px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition">
+                            <button onclick="deleteProfileItem(${loc.profileIdx}, '${escapeJsAttr(loc.blockId)}')" class="px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
@@ -2921,6 +3177,9 @@ function invAdjustQty(blockId, profileIdx, delta) {
     const normKey = getProfileGroupKey(item);
     previewProfileOn3D(normKey, blockId, (data.tiers || 1) > 1 ? (item.tier || 1) : null);
     renderInventoryPage();
+    if (delta < 0) {
+        notifyStockAlertForGroup(normKey);
+    }
 }
 
 function openMoveProfileModal(blockId, profileIdx) {
@@ -3451,11 +3710,21 @@ function focusZone(zone, btnEl) {
 
 function updateFloorPlanButtonUI() {
     const mainBtn = document.getElementById('btn-floor-plan');
+    const mainText = document.getElementById('floor-plan-btn-text');
+    const mainIcon = document.getElementById('floor-plan-btn-icon');
     const invBtn = document.getElementById('inv-btn-floor-plan');
     if (mainBtn) {
         mainBtn.className = isFloorPlanView
-            ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400 text-sky-300 px-3 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-lg'
-            : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg';
+            ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400 text-sky-300 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5'
+            : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5';
+    }
+    if (mainText) {
+        mainText.textContent = isFloorPlanView ? t('btn_3d_map') : t('btn_floor_plan');
+    }
+    if (mainIcon) {
+        mainIcon.className = isFloorPlanView
+            ? 'fa-solid fa-cubes text-sky-300'
+            : 'fa-solid fa-map text-sky-400';
     }
     if (invBtn) {
         invBtn.className = isFloorPlanView
@@ -3931,7 +4200,7 @@ function buildNormalizedPayloads(blocks) {
                     length: String(getProfileLength(p) || '-').trim() || '-',
                     color: String(getProfileColor(p) || '-').trim() || '-',
                     material: String(p.material || 'A6063-T5').trim() || 'A6063-T5',
-                    default_min_qty: Math.max(0, parseInt(p.minQty) || 30),
+                    default_min_qty: (p.minQty !== undefined && p.minQty !== null) ? Math.max(0, parseInt(p.minQty) || 0) : 30,
                     updated_at: now
                 });
             }
@@ -3984,7 +4253,9 @@ function assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows) {
             material: master ? master.material : 'A6063-T5',
             layer: inv.layer_label || `L${Number(inv.tier) || 1}`,
             qty: Number(inv.qty) || 0,
-            minQty: Number(inv.min_qty) || 0
+            minQty: (inv.min_qty !== undefined && inv.min_qty !== null)
+                ? Number(inv.min_qty)
+                : (master && master.default_min_qty !== undefined ? Number(master.default_min_qty) : 30)
         });
     });
 

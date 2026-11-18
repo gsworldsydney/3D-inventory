@@ -18,44 +18,48 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css?v=12">
+    <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
     <!-- 상단 키오스크 헤더 -->
-    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex flex-wrap items-center justify-between gap-3 z-20 shrink-0">
-        <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/50 flex items-center justify-center text-sky-400">
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-5 py-2.5 flex flex-col gap-2.5 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center z-20 shrink-0">
+        <!-- 좌측: 브랜드 타이틀 -->
+        <div class="flex items-center space-x-3 justify-self-start min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/50 flex items-center justify-center text-sky-400 shrink-0">
                 <i class="fa-solid fa-industry text-xl"></i>
             </div>
-            <div>
-                <h1 class="text-lg md:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <div class="min-w-0">
+                <h1 class="text-lg md:text-xl font-bold tracking-tight text-white flex items-center gap-2 whitespace-nowrap">
                     SMART FACTORY <span class="text-sky-400">3D INVENTORY</span>
                     <span class="text-xs bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-medium">KIOSK</span>
                 </h1>
-                <p id="header-subtitle" class="text-xs text-slate-400 hidden sm:block">Click any 3D Rack to inspect stored aluminum profiles and stock.</p>
+                <p id="header-subtitle" class="text-xs text-slate-400 hidden sm:block truncate">Click any 3D Rack to inspect stored aluminum profiles and stock.</p>
             </div>
         </div>
 
-        <!-- 페이지 전환 탭 + 컨트롤 -->
-        <div class="flex items-center flex-wrap gap-2.5">
-            <!-- 페이지 전환 네비게이션 -->
-            <div class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-inner">
-                <button id="nav-map-btn" onclick="switchPage('map')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition flex items-center gap-1.5 shadow">
+        <!-- 중앙 고정: 3D Factory Map <-> Full Inventory 전환 버튼 -->
+        <div class="flex justify-center lg:justify-self-center shrink-0">
+            <div id="page-nav-switcher" class="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800 shadow-inner">
+                <button id="nav-map-btn" onclick="switchPage('map')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition flex items-center gap-1.5 shadow whitespace-nowrap">
                     <i class="fa-solid fa-cubes"></i>
                     <span data-i18n="nav_map">3D Factory Map</span>
                 </button>
-                <button id="nav-inv-btn" onclick="switchPage('inventory')" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                <button id="nav-inv-btn" onclick="switchPage('inventory')" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-boxes-stacked"></i>
                     <span data-i18n="nav_inv">Full Inventory</span>
                     <span id="nav-inv-count" class="px-1.5 py-0.2 rounded-md bg-slate-800 text-sky-300 text-[10px] font-mono">0</span>
+                    <span id="nav-inv-alert-badge" class="hidden px-1.5 py-0.2 rounded-md text-[10px] font-bold"></span>
                 </button>
             </div>
+        </div>
 
+        <!-- 우측: 검색 / 관리자 / 클라우드 / 언어 컨트롤 -->
+        <div class="flex items-center flex-wrap justify-end gap-2 lg:justify-self-end min-w-0">
             <!-- 3D 지도 전용 컨트롤 그룹 -->
-            <div id="map-header-controls" class="flex items-center space-x-2.5">
-                <!-- 새 랙 추가 버튼 -->
-                <button onclick="openRackModal('add')" class="bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-1.5 shadow-lg">
+            <div id="map-header-controls" class="flex items-center flex-wrap gap-2">
+                <!-- 새 랙 추가 버튼 (관리자 전용) -->
+                <button id="btn-add-rack" onclick="openRackModal('add')" class="admin-only hidden bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-1.5 shadow-lg">
                     <i class="fa-solid fa-plus"></i>
                     <span class="hidden sm:inline" data-i18n="btn_add_rack">Add Rack</span>
                 </button>
@@ -67,16 +71,8 @@
                 <div class="relative hidden md:block">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                     <input type="text" id="search-input" data-i18n-placeholder="search_placeholder" placeholder="Search profile code (e.g. AL-4040)" 
-                        class="bg-slate-800/80 border border-slate-700 text-sm rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-64 transition">
+                        class="bg-slate-800/80 border border-slate-700 text-sm rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-52 xl:w-60 transition">
                 </div>
-                <button id="btn-reset-cam" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg">
-                    <i class="fa-solid fa-compress"></i>
-                    <span class="hidden sm:inline" data-i18n="btn_full_view">Full View</span>
-                </button>
-                <button id="btn-floor-plan" onclick="toggleFloorPlanView()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg" title="Switch between 3D View and 2D Floor Plan">
-                    <i class="fa-solid fa-map text-sky-400"></i>
-                    <span id="floor-plan-btn-text" class="hidden sm:inline" data-i18n="btn_floor_plan">Floor Plan</span>
-                </button>
             </div>
 
             <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 (Live Sync는 관리자 전용) -->
@@ -124,7 +120,7 @@
         <div class="relative flex-1 h-full bg-slate-950" id="canvas-wrapper">
             <div id="canvas-container"></div>
 
-            <!-- 3D 맵 상단 플로팅 범례 & 구역 빠른 이동 (키오스크 스타일) -->
+            <!-- 3D 맵 상단 플로팅 범례 & 구역 빠른 이동 & 뷰 컨트롤 (키오스크 스타일) -->
             <div class="absolute top-4 left-4 right-4 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
                 <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
                     <!-- 동(Facility) 빠른 필터 버튼 -->
@@ -143,11 +139,24 @@
                     </div>
                 </div>
 
-                <!-- 상태 범례 -->
-                <div class="hidden xl:flex items-center gap-4 bg-slate-900/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 text-xs pointer-events-auto">
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400 inline-block"></span> <span data-i18n="legend_normal">Normal</span></div>
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span> <span data-i18n="legend_warning">Low Stock</span></div>
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block ring-2 ring-rose-400/50"></span> <span data-i18n="legend_selected">Selected</span></div>
+                <!-- 우측 상단: 상태 범례 + Full View / Floor Plan(3D Map) 버튼 -->
+                <div class="flex flex-wrap items-center justify-end gap-2 ml-auto pointer-events-auto">
+                    <div class="hidden xl:flex items-center gap-4 bg-slate-900/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 text-xs shadow-xl">
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400 inline-block"></span> <span data-i18n="legend_normal">Normal</span></div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span> <span data-i18n="legend_warning">Low Stock</span></div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block ring-2 ring-rose-400/50"></span> <span data-i18n="legend_selected">Selected</span></div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl">
+                        <button id="btn-reset-cam" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-compress"></i>
+                            <span data-i18n="btn_full_view">Full View</span>
+                        </button>
+                        <button id="btn-floor-plan" onclick="toggleFloorPlanView()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="Switch between 3D View and 2D Floor Plan">
+                            <i id="floor-plan-btn-icon" class="fa-solid fa-map text-sky-400"></i>
+                            <span id="floor-plan-btn-text">Floor Plan</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -323,57 +332,30 @@
     <section id="inventory-page" class="hidden flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-950">
         <!-- 좌측/중앙: 테이블 기반 통합 인벤토리 영역 -->
         <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
-            <!-- 상단 요약 KPI & 필터 툴바 -->
-            <div class="px-5 py-3.5 bg-slate-900/60 border-b border-slate-800 space-y-3 shrink-0">
-                <!-- KPI 요약 4종 -->
-                <div class="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
-                    <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
-                        <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_types">Profile Types</span>
-                            <strong id="inv-kpi-types" class="text-lg font-bold text-white block">0 types</strong>
-                        </div>
-                        <div class="w-9 h-9 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center">
-                            <i class="fa-solid fa-layer-group"></i>
-                        </div>
+            <!-- 상단 검색, 재고 알림 KPI & 필터 툴바 -->
+            <div class="px-5 py-3.5 bg-slate-900/60 border-b border-slate-800 space-y-2.5 shrink-0">
+                <!-- 검색창 (확장) + Stock Alerts 카드 -->
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <div class="relative flex-1 min-w-[240px]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="inv-search-input" oninput="renderInventoryPage()" data-i18n-placeholder="inv_search_ph" placeholder="Search code, name, length, color, rack..."
+                            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 shadow-inner transition">
                     </div>
-                    <div onclick="setInvQuickFilter('multi')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="Filter multi-location profiles">
+
+                    <div onclick="setInvQuickFilter('low')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-rose-500/50 rounded-xl px-3.5 py-2 flex items-center justify-between gap-3 shrink-0 transition" title="Filter Warning / Danger stock alerts">
                         <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_multi">Multi-Location (2+)</span>
-                            <strong id="inv-kpi-multi" class="text-lg font-bold text-indigo-400 block">0 types</strong>
+                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_low">Stock Alerts (Warn / Danger)</span>
+                            <strong id="inv-kpi-low" class="text-sm sm:text-base font-bold text-amber-400 block">0 alerts</strong>
                         </div>
-                        <div class="w-9 h-9 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center">
-                            <i class="fa-solid fa-code-branch"></i>
-                        </div>
-                    </div>
-                    <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
-                        <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_qty">Total Factory Stock</span>
-                            <strong id="inv-kpi-qty" class="text-lg font-bold text-emerald-400 block">0 EA</strong>
-                        </div>
-                        <div class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-                            <i class="fa-solid fa-cubes"></i>
-                        </div>
-                    </div>
-                    <div onclick="setInvQuickFilter('low')" class="cursor-pointer bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-xl px-3.5 py-2.5 flex items-center justify-between transition" title="Filter low stock items">
-                        <div>
-                            <span class="text-[11px] text-slate-400 block" data-i18n="kpi_low">Low Stock Locations</span>
-                            <strong id="inv-kpi-low" class="text-lg font-bold text-amber-400 block">0 items</strong>
-                        </div>
-                        <div class="w-9 h-9 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                        <div class="w-9 h-9 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                         </div>
                     </div>
                 </div>
 
-                <!-- 검색 및 필터 바 -->
+                <!-- 필터 & 액션 바 -->
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
-                        <div class="relative flex-1 min-w-[180px] max-w-xs">
-                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                            <input type="text" id="inv-search-input" oninput="renderInventoryPage()" data-i18n-placeholder="inv_search_ph" placeholder="Search code, name, length, color, rack..."
-                                class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400">
-                        </div>
-
+                    <div class="flex flex-wrap items-center gap-2">
                         <select id="inv-filter-fac" onchange="renderInventoryPage()" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                             <option value="ALL" data-i18n="opt_all_fac">All Facs</option>
                             <option value="Fac C">Fac C</option>
@@ -390,7 +372,9 @@
                         <div class="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-[11px]">
                             <button id="inv-chip-all" onclick="setInvQuickFilter('all')" class="px-2.5 py-1 rounded-lg font-bold bg-sky-500 text-slate-950 transition" data-i18n="chip_all">All</button>
                             <button id="inv-chip-multi" onclick="setInvQuickFilter('multi')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_multi">Multi-Loc</button>
-                            <button id="inv-chip-low" onclick="setInvQuickFilter('low')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_low">Low Stock</button>
+                            <button id="inv-chip-low" onclick="setInvQuickFilter('low')" class="px-2.5 py-1 rounded-lg font-medium text-slate-300 hover:text-white transition" data-i18n="chip_low">Alerts</button>
+                            <button id="inv-chip-warning" onclick="setInvQuickFilter('warning')" class="px-2.5 py-1 rounded-lg font-medium text-amber-300 hover:text-amber-200 transition" data-i18n="chip_warning">Warning</button>
+                            <button id="inv-chip-danger" onclick="setInvQuickFilter('danger')" class="px-2.5 py-1 rounded-lg font-medium text-rose-300 hover:text-rose-200 transition" data-i18n="chip_danger">Danger</button>
                         </div>
                     </div>
 
@@ -398,24 +382,19 @@
                         <button onclick="toggleAllInventoryGroups(true)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_expand_all">Expand All</button>
                         <button onclick="toggleAllInventoryGroups(false)" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition" data-i18n="btn_collapse_all">Collapse All</button>
                         <button onclick="exportToExcel()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition flex items-center gap-1" title="Export Excel (.xlsx)">
-                            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_export">Export Excel</span>
+                            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_export">Export</span>
                         </button>
                         <button onclick="triggerExcelImport()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[11px] font-bold transition flex items-center gap-1" title="Import Excel (.xlsx, .xls, .csv)">
-                            <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_excel_import">Import Excel</span>
-                        </button>
-                        <button onclick="triggerJsonImport()" class="px-2.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold transition flex items-center gap-1" title="Import data.json">
-                            <i class="fa-solid fa-file-code"></i> <span data-i18n="btn_json_import">Import JSON</span>
-                        </button>
-                        <button onclick="reloadFromDataJson()" class="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] transition flex items-center gap-1" title="Reload data.json from server">
-                            <i class="fa-solid fa-rotate"></i> <span data-i18n="btn_sync_json">Sync JSON</span>
+                            <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_excel_import">Import</span>
                         </button>
                         <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleExcelFileSelect(event)">
-                        <input type="file" id="json-file-input" accept=".json" class="hidden" onchange="handleJsonFileSelect(event)">
                         <button onclick="openInventoryAddModal()" class="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition flex items-center gap-1 shadow">
                             <i class="fa-solid fa-plus"></i> <span data-i18n="btn_inv_add">Stock In</span>
                         </button>
                     </div>
                 </div>
+                <!-- 실시간 총재고 경고 / 위험 알림 배너 -->
+                <div id="inv-alert-banner" class="hidden rounded-xl border px-3.5 py-2.5 text-xs space-y-1.5"></div>
             </div>
 
             <!-- 고정 컬럼 테이블 컨테이너 -->
@@ -423,21 +402,24 @@
                 <table class="w-full text-left border-collapse text-xs">
                     <thead class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wider">
                         <tr>
-                            <th onclick="setInventorySort('code')" class="py-2.5 pl-4 pr-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-36">
+                            <th onclick="setInventorySort('code')" class="py-2.5 pl-4 pr-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-32">
                                 <span data-i18n="th_code">Code</span> <span id="sort-ind-code" class="text-sky-400 ml-0.5"></span>
                             </th>
-                            <th onclick="setInventorySort('name')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white min-w-[180px]">
+                            <th onclick="setInventorySort('name')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white min-w-[160px]">
                                 <span data-i18n="th_name">Profile Name</span> <span id="sort-ind-name" class="text-sky-400 ml-0.5">▲</span>
                             </th>
-                            <th onclick="setInventorySort('length')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-24">
+                            <th onclick="setInventorySort('length')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-20">
                                 <span data-i18n="th_length">Length</span> <span id="sort-ind-length" class="text-sky-400 ml-0.5"></span>
                             </th>
-                            <th onclick="setInventorySort('color')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-24">
+                            <th onclick="setInventorySort('color')" class="py-2.5 px-2 font-semibold cursor-pointer hover:text-white whitespace-nowrap w-20">
                                 <span data-i18n="th_color">Color</span> <span id="sort-ind-color" class="text-sky-400 ml-0.5"></span>
                             </th>
-                            <th class="py-2.5 px-2 font-semibold min-w-[190px]" data-i18n="th_locations">Locations (Click for 3D)</th>
-                            <th onclick="setInventorySort('totalQty')" class="py-2.5 px-2 font-semibold text-right cursor-pointer hover:text-white whitespace-nowrap w-24">
+                            <th class="py-2.5 px-2 font-semibold min-w-[170px]" data-i18n="th_locations">Locations (Click for 3D)</th>
+                            <th onclick="setInventorySort('totalQty')" class="py-2.5 px-2 font-semibold text-right cursor-pointer hover:text-white whitespace-nowrap w-28">
                                 <span data-i18n="th_total">Total</span> <span id="sort-ind-totalQty" class="text-sky-400 ml-0.5"></span>
+                            </th>
+                            <th onclick="setInventorySort('safetyStock')" class="py-2.5 px-2 font-semibold text-right cursor-pointer hover:text-white whitespace-nowrap w-28">
+                                <span data-i18n="th_safety">Safety Stock</span> <span id="sort-ind-safetyStock" class="text-sky-400 ml-0.5"></span>
                             </th>
                             <th class="py-2.5 pl-2 pr-4 font-semibold text-right whitespace-nowrap w-28" data-i18n="th_actions">Actions</th>
                         </tr>
@@ -822,6 +804,6 @@
         <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=15"></script>
 </body>
 </html>
