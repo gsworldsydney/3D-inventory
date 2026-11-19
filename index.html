@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css?v=15">
+    <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
@@ -74,6 +74,16 @@
                         class="bg-slate-800/80 border border-slate-700 text-sm rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-52 xl:w-60 transition">
                 </div>
             </div>
+
+            <!-- 관리자 전용: Profile List / Part List 마스터 관리 버튼 -->
+            <button id="btn-profile-list" onclick="openCatalogModal('PROFILE')" class="admin-only hidden bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Manage Master Profile List">
+                <i class="fa-solid fa-table-list"></i>
+                <span class="hidden sm:inline" data-i18n="btn_profile_list">Profile List</span>
+            </button>
+            <button id="btn-part-list" onclick="openCatalogModal('PART')" class="admin-only hidden bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/40 text-violet-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Manage Master Part List">
+                <i class="fa-solid fa-screwdriver-wrench"></i>
+                <span class="hidden sm:inline" data-i18n="btn_part_list">Part List</span>
+            </button>
 
             <!-- Supabase 클라우드 DB 상태/설정 & 즉시 저장 버튼 (Live Sync는 관리자 전용) -->
             <button id="btn-cloud-config" onclick="openSupabaseModal()" class="admin-only hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg" title="Supabase Real-Time Cloud DB Settings">
@@ -542,9 +552,9 @@
         </div>
     </div>
 
-    <!-- 모달 2: 품목(Profile) 추가 / 수정 모달 -->
+    <!-- 모달 2: 품목(Profile / Part) 추가 / 수정 모달 (등록된 마스터 품목만 입력 가능) -->
     <div id="profile-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden text-xs">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-visible text-xs">
             <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 id="profile-modal-title" class="text-base font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-box-open text-sky-400"></i> Add Profile Item
@@ -564,14 +574,47 @@
                 </div>
                 <input type="hidden" id="profile-form-layer" value="">
                 <input type="hidden" id="profile-form-material" value="A6063-T5">
-                <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_name">Profile Name *</label>
-                    <input type="text" id="profile-form-name" placeholder="e.g. Standard Aluminum Profile 40x40" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                <input type="hidden" id="profile-form-selected-code" value="">
+
+                <!-- 마스터 리스트 선택형 품목 이름 입력 + 자동완성 드롭다운 -->
+                <div class="relative" id="profile-name-picker-wrap">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-slate-400" data-i18n="modal_prof_name">Profile / Part Name *</label>
+                        <div class="inline-flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                            <button type="button" id="prof-type-filter-all" onclick="setProfileModalCatalogFilter('ALL')" class="px-2 py-0.5 rounded font-bold bg-sky-500 text-slate-950 transition">All</button>
+                            <button type="button" id="prof-type-filter-profile" onclick="setProfileModalCatalogFilter('PROFILE')" class="px-2 py-0.5 rounded font-medium text-slate-300 hover:text-white transition">PROFILE</button>
+                            <button type="button" id="prof-type-filter-part" onclick="setProfileModalCatalogFilter('PART')" class="px-2 py-0.5 rounded font-medium text-slate-300 hover:text-white transition">PART</button>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="profile-form-name" autocomplete="off"
+                            onfocus="showProfileCatalogDropdown()"
+                            oninput="onProfileCatalogSearchInput()"
+                            onkeydown="onProfileNameInputKeydown(event)"
+                            data-i18n-placeholder="modal_prof_name_ph"
+                            placeholder="Search or select from Profile / Part List..."
+                            class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-2 text-white focus:border-sky-400 focus:outline-none">
+                        <button type="button" onclick="toggleProfileCatalogDropdown()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white" title="Show registered items">
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <!-- 자동완성 목록 -->
+                    <div id="profile-catalog-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 max-h-56 overflow-y-auto bg-slate-900 border border-sky-500/50 rounded-xl shadow-2xl z-50 divide-y divide-slate-800"></div>
                 </div>
-                <div>
-                    <label class="text-slate-400 block mb-1" data-i18n="modal_prof_code">Profile Code</label>
-                    <input type="text" id="profile-form-code" placeholder="e.g. AL-4040-S" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+
+                <!-- 선택된 마스터 품목 요약 + 자동 부여된 Code -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    <div>
+                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_code">Profile Code (Auto-Assigned)</label>
+                        <input type="text" id="profile-form-code" readonly placeholder="Auto-filled from list" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
+                    </div>
+                    <div id="profile-selected-preview" class="bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 min-h-[54px] flex items-center gap-2.5 text-[11px] text-slate-400">
+                        <i class="fa-solid fa-circle-info text-slate-500"></i>
+                        <span data-i18n="modal_prof_select_hint">Select a registered Profile or Part above.</span>
+                    </div>
                 </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-slate-400 block mb-1" data-i18n="modal_prof_length">Length (mm)</label>
@@ -585,18 +628,16 @@
                         <input type="text" id="profile-form-color" placeholder="e.g. Silver / Black" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_qty">Current Quantity (EA)</label>
-                        <input type="number" id="profile-form-qty" min="0" value="100" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+                <input type="hidden" id="profile-form-minqty" value="0">
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-slate-400" data-i18n="modal_prof_qty">Current Quantity (EA)</label>
+                        <span class="text-[10px] text-slate-500" data-i18n="modal_prof_minqty_hint">Safety stock is managed in Full Inventory</span>
                     </div>
-                    <div>
-                        <label class="text-slate-400 block mb-1" data-i18n="modal_prof_minqty">Safety Stock (EA)</label>
-                        <input type="number" id="profile-form-minqty" min="0" value="30" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
-                    </div>
+                    <input type="number" id="profile-form-qty" min="0" value="100" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
                 </div>
             </div>
-            <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+            <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2 rounded-b-2xl">
                 <button onclick="closeProfileModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
                 <button onclick="saveProfileModal()" class="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition" data-i18n="btn_save">Save</button>
             </div>
@@ -792,6 +833,167 @@
         </div>
     </div>
 
+    <!-- 모달 8: 회사 마스터 물품 리스트 관리 모달 (Profile List / Part List) -->
+    <div id="catalog-modal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[96vw] xl:max-w-7xl h-[90vh] shadow-2xl overflow-hidden flex flex-col text-xs">
+            <!-- 모달 헤더 -->
+            <div class="px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900 shrink-0">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-table-list text-sky-400"></i>
+                        <span data-i18n="modal_cat_title">Master Item List</span>
+                    </h3>
+                    <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                        <button id="cat-tab-profile" onclick="switchCatalogTab('PROFILE')" class="px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition flex items-center gap-1.5">
+                            <span>Profile List</span>
+                            <span id="cat-count-profile" class="px-1.5 rounded bg-slate-950/20 text-[10px] font-mono">0</span>
+                        </button>
+                        <button id="cat-tab-part" onclick="switchCatalogTab('PART')" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                            <span>Part List</span>
+                            <span id="cat-count-part" class="px-1.5 rounded bg-slate-800 text-[10px] font-mono">0</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center flex-wrap gap-2">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="cat-search-input" oninput="renderCatalogTable()" placeholder="Search Code, Product, Name, Mold..." class="bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-48 sm:w-56">
+                    </div>
+                    <select id="cat-filter-product" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+                        <option value="ALL">Product: ALL</option>
+                    </select>
+                    <select id="cat-filter-madein" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+                        <option value="ALL">MADE IN: ALL</option>
+                    </select>
+                    <select id="cat-filter-active" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+                        <option value="ALL">ACTIVE: ALL</option>
+                        <option value="YES">ACTIVE: YES</option>
+                        <option value="NO">ACTIVE: NO</option>
+                    </select>
+                    <button id="cat-btn-open-register" onclick="toggleCatalogFormPanel()" class="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition flex items-center gap-1 shadow">
+                        <i class="fa-solid fa-plus"></i> <span id="cat-btn-register-text">Register New PROFILE</span>
+                    </button>
+                    <button onclick="exportCatalogToExcel()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold transition flex items-center gap-1">
+                        <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_export">Export</span>
+                    </button>
+                    <button onclick="triggerCatalogExcelImport()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-bold transition flex items-center gap-1">
+                        <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_excel_import">Import</span>
+                    </button>
+                    <input type="file" id="cat-excel-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleCatalogExcelImport(event)">
+                    <input type="file" id="cat-img-file-input" accept="image/*" class="hidden" onchange="handleCatalogImageFileSelect(event)">
+                    <button onclick="closeCatalogModal()" class="text-slate-400 hover:text-white text-base ml-1"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+
+            <!-- 상단 등록 / 수정 입력 폼 (기본 숨김, 버튼 클릭 또는 편집 시 표시) -->
+            <div id="cat-form-panel" class="hidden px-5 py-3 bg-slate-950/70 border-b border-slate-800 shrink-0 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span id="cat-form-mode-label" class="text-[11px] font-bold text-sky-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-plus-circle"></i> Register New Item
+                    </span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-[11px] text-slate-400" data-i18n="modal_cat_rule_hint">Only registered items (ACTIVE: YES) can be added to warehouse racks.</span>
+                        <button type="button" onclick="closeCatalogFormPanel()" class="text-slate-400 hover:text-white text-sm" title="Close Form"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2 items-end">
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">No. *</label>
+                        <input type="number" id="cat-form-no" min="1" placeholder="1" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Code (Auto)</label>
+                        <input type="text" id="cat-form-code" readonly placeholder="FA-PKO-A1" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Product *</label>
+                        <input type="text" id="cat-form-product" placeholder="FAA" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white uppercase focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Type</label>
+                        <select id="cat-form-type" onchange="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                            <option value="PROFILE">PROFILE</option>
+                            <option value="PART">PART</option>
+                        </select>
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">MADE IN *</label>
+                        <input type="text" id="cat-form-madein" placeholder="KOREA" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white uppercase focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">ACTIVE</label>
+                        <select id="cat-form-active" onchange="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                            <option value="YES">YES</option>
+                            <option value="NO">NO</option>
+                        </select>
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Manufacture</label>
+                        <input type="text" id="cat-form-mfg" placeholder="LB" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-2">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">PART NAME(Eng) *</label>
+                        <input type="text" id="cat-form-eng" placeholder="FRONT POLE BAR FOR BASIC" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">OZTECH NAME</label>
+                        <input type="text" id="cat-form-oz" placeholder="타이탄 프론트바" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">MOLD NO.</label>
+                        <input type="text" id="cat-form-mold" placeholder="HY-807" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">WEIGHT (KG/M2)</label>
+                        <input type="number" id="cat-form-weight" min="0" step="0.001" inputmode="decimal" placeholder="1.750" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                        <span class="text-[10px] text-slate-400 shrink-0">Img:</span>
+                        <input type="text" id="cat-form-img" oninput="updateCatalogFormImagePreview()" placeholder="Image URL or upload..." class="flex-1 max-w-sm bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-white focus:border-sky-400 focus:outline-none">
+                        <button type="button" onclick="triggerCatalogImageUpload('form')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] transition flex items-center gap-1">
+                            <i class="fa-solid fa-image text-sky-400"></i> Upload
+                        </button>
+                        <img id="cat-form-img-preview" src="" alt="Preview" class="hidden w-7 h-7 rounded object-cover border border-slate-600 bg-white">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="closeCatalogFormPanel()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition" data-i18n="btn_cancel">Cancel</button>
+                        <button type="button" onclick="resetCatalogForm()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition">Reset</button>
+                        <button type="button" id="cat-form-save-btn" onclick="saveCatalogItemForm()" class="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold transition flex items-center gap-1">
+                            <i class="fa-solid fa-check"></i> Save Item
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 스프레드시트 양식 테이블 -->
+            <div class="flex-1 overflow-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="sticky top-0 z-10 bg-slate-800/95 backdrop-blur-md border-b border-slate-700 text-[11px] text-slate-200">
+                        <tr>
+                            <th onclick="setCatalogSort('no')" class="py-2 pl-4 pr-2 font-semibold whitespace-nowrap w-14 cursor-pointer hover:text-white">No. <span id="cat-sort-ind-no" class="text-sky-400 ml-0.5">▲</span></th>
+                            <th onclick="setCatalogSort('code')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Code <span id="cat-sort-ind-code" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('product')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Product <span id="cat-sort-ind-product" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('type')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Type <span id="cat-sort-ind-type" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('madeIn')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">MADE IN <span id="cat-sort-ind-madeIn" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('active')" class="py-2 px-2 font-semibold whitespace-nowrap text-center cursor-pointer hover:text-white">ACTIVE <span id="cat-sort-ind-active" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('manufacture')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Manufacture <span id="cat-sort-ind-manufacture" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('partNameEng')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[200px] cursor-pointer hover:text-white">PART NAME(Eng) <span id="cat-sort-ind-partNameEng" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('oztechName')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[140px] cursor-pointer hover:text-white">OZTECH NAME <span id="cat-sort-ind-oztechName" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('moldNo')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">MOLD NO. <span id="cat-sort-ind-moldNo" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('weight')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">WEIGHT (KG/M2) <span id="cat-sort-ind-weight" class="text-sky-400 ml-0.5"></span></th>
+                            <th class="py-2 px-2 font-semibold whitespace-nowrap text-center">Img</th>
+                            <th class="py-2 pl-2 pr-4 font-semibold whitespace-nowrap text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cat-table-body" class="divide-y divide-slate-800/80"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- 호버 툴팁 (마우스 따라다니는 미니 정보창 - 3D 지도/인벤토리 프리뷰 공용) -->
     <div id="hover-tooltip" class="hidden fixed pointer-events-none z-40 bg-slate-900/95 border border-sky-400/60 text-white px-3 py-2 rounded-xl shadow-2xl text-xs backdrop-blur-md">
         <div class="font-bold text-sky-400" id="tooltip-title">A-01 Rack</div>
@@ -804,6 +1006,6 @@
         <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=20"></script>
 </body>
 </html>

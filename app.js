@@ -353,7 +353,107 @@ const DEFAULT_FACTORY_BLOCKS_DATA = [
         ]
     }
 ];
+const DEFAULT_MASTER_CATALOG_DATA = [
+    { no: 1, code: "FA-PMA-A1", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FRONT POLE BAR FOR BASIC, TITAN", oztechName: "타이탄 프론트바", moldNo: "", weight: "", img: "" },
+    { no: 2, code: "FA-PMA-A2", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA HOOD", oztechName: "폴딩암 후드", moldNo: "", weight: "", img: "" },
+    { no: 3, code: "FA-PMA-A3", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA TRAY", oztechName: "폴딩암 트레이", moldNo: "", weight: "", img: "" },
+    { no: 4, code: "FA-PKO-A4", product: "FAA", type: "PROFILE", madeIn: "KOREA", active: "YES", manufacture: "한성알미늄", partNameEng: "FRONT POLE BAR FOR BASIC TITAN", oztechName: "타이탄 프론트바", moldNo: "HY-807", weight: "1.750", img: "" }
+];
 /* __BAKED_DATA_END__ */
+
+const CATALOG_STORAGE_KEY = 'smart_factory_master_catalog_v1';
+
+function extractCatalogWeightNumber(raw) {
+    const match = String(raw ?? '').trim().match(/(\d+(?:\.\d+)?)/);
+    return match ? match[1] : '';
+}
+
+function normalizeCatalogItem(raw, fallbackNo = 1) {
+    const code = String((raw && raw.code) || '').trim();
+    const rawType = String((raw && (raw.type || raw.item_type)) || 'PROFILE').trim().toUpperCase();
+    const rawActive = String((raw && raw.active) || 'YES').trim().toUpperCase();
+    return {
+        no: Math.max(1, parseInt(raw && (raw.no ?? raw.item_no)) || fallbackNo),
+        code,
+        product: String((raw && raw.product) || '').trim(),
+        type: rawType === 'PART' ? 'PART' : 'PROFILE',
+        madeIn: String((raw && (raw.madeIn ?? raw.made_in)) || '').trim(),
+        active: rawActive === 'NO' ? 'NO' : 'YES',
+        manufacture: String((raw && raw.manufacture) || '').trim(),
+        partNameEng: String((raw && (raw.partNameEng ?? raw.part_name_eng)) || '').trim(),
+        oztechName: String((raw && (raw.oztechName ?? raw.oztech_name)) || '').trim(),
+        moldNo: String((raw && (raw.moldNo ?? raw.mold_no)) || '').trim(),
+        weight: extractCatalogWeightNumber(raw && raw.weight),
+        img: String((raw && raw.img) || '').trim()
+    };
+}
+
+function normalizeCatalogArray(arr) {
+    const seen = new Set();
+    const result = [];
+    (arr || []).forEach((item, idx) => {
+        const norm = normalizeCatalogItem(item, idx + 1);
+        if (!norm.code) return;
+        const key = norm.code.toUpperCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push(norm);
+    });
+    return result.sort((a, b) => (a.no - b.no) || a.code.localeCompare(b.code));
+}
+
+function loadMasterCatalog() {
+    try {
+        const raw = localStorage.getItem(CATALOG_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return normalizeCatalogArray(parsed);
+            }
+            if (parsed && Array.isArray(parsed.items)) {
+                const storedRev = Number(parsed.revision) || 1;
+                if (storedRev >= DEFAULT_DATA_REVISION) {
+                    return normalizeCatalogArray(parsed.items);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load master catalog, using defaults:', e);
+    }
+    return normalizeCatalogArray(JSON.parse(JSON.stringify(DEFAULT_MASTER_CATALOG_DATA)));
+}
+
+let masterCatalogData = loadMasterCatalog();
+
+function saveMasterCatalog(isUserEdit = true) {
+    masterCatalogData = normalizeCatalogArray(masterCatalogData);
+    try {
+        localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify({
+            revision: DEFAULT_DATA_REVISION,
+            dirty: isUserEdit,
+            items: masterCatalogData
+        }));
+    } catch (e) {
+        console.error('Failed to save master catalog:', e);
+    }
+    if (isUserEdit && typeof scheduleCloudPush === 'function') {
+        scheduleCloudPush();
+    }
+}
+
+function getCatalogItemByCode(code) {
+    const key = String(code || '').trim().toUpperCase();
+    if (!key) return null;
+    return masterCatalogData.find(item => item.code.toUpperCase() === key) || null;
+}
+
+function getActiveCatalogItems(typeFilter = 'ALL') {
+    return masterCatalogData.filter(item => {
+        if (item.active !== 'YES') return false;
+        if (typeFilter !== 'ALL' && item.type !== typeFilter) return false;
+        return true;
+    });
+}
 
 function normalizeBlocksArray(arr) {
     arr.forEach(b => {
@@ -471,6 +571,18 @@ async function loadInitialDataFromJsonOrStorage() {
                 blocks: factoryBlocksData
             }));
         }
+        if (Array.isArray(json.catalog)) {
+            let catStored = null;
+            try {
+                const rawCat = localStorage.getItem(CATALOG_STORAGE_KEY);
+                if (rawCat) catStored = JSON.parse(rawCat);
+            } catch (_) {}
+            const catDirty = catStored && !Array.isArray(catStored) ? Boolean(catStored.dirty) : false;
+            if (!catStored || !catDirty || remoteRev > storedRev) {
+                masterCatalogData = normalizeCatalogArray(json.catalog);
+                saveMasterCatalog(false);
+            }
+        }
     } catch (err) {
         // file:// 로컬 열기 등 fetch 불가 환경에서는 기존 loadFactoryData() 결과 유지
         console.info("data.json 자동 로드 생략(로컬 파일 또는 오프라인 모드):", err.message);
@@ -544,6 +656,8 @@ const I18N = {
         nav_map: '3D 공장 지도',
         nav_inv: '전체 인벤토리',
         btn_add_rack: '랙 추가',
+        btn_profile_list: 'Profile List',
+        btn_part_list: 'Part List',
         btn_full_view: '전체 뷰',
         btn_floor_plan: '평면도',
         btn_3d_map: '3D Map',
@@ -637,13 +751,18 @@ const I18N = {
         modal_prof_rack: '보관 랙 (Rack)',
         modal_prof_tier: '적재 단수 (Level)',
         modal_prof_layer: '위치 라벨 (Layer)',
-        modal_prof_code: '프로파일 코드',
+        modal_prof_code: '품목 코드 (자동 부여)',
         modal_prof_material: '재질 (Material)',
-        modal_prof_name: '품목명 *',
+        modal_prof_name: '등록 품목명 (Profile / Part) *',
+        modal_prof_name_ph: 'Profile / Part List에서 이름 또는 코드 검색/선택...',
+        modal_prof_select_hint: '위 검색창에서 등록된 Profile 또는 Part를 선택하세요.',
+        modal_cat_title: '마스터 물품 리스트 (Profile / Part List)',
+        modal_cat_rule_hint: 'Profile/Part List에 등록되고 ACTIVE가 YES인 품목만 랙에 입력할 수 있습니다.',
         modal_prof_length: '길이 (mm)',
         modal_prof_color: '색상 (Color)',
         modal_prof_qty: '현재 재고 수량 (EA)',
         modal_prof_minqty: '안전재고 기준 (EA)',
+        modal_prof_minqty_hint: '안전재고는 Full Inventory에서 통합 관리됩니다',
         modal_move_title: '보관 위치 이동 / 분할 적재',
         modal_move_rack: '이동할 랙 (Target Rack)',
         modal_move_tier: '이동할 단수 (Level)',
@@ -706,6 +825,8 @@ const I18N = {
         nav_map: '3D Factory Map',
         nav_inv: 'Full Inventory',
         btn_add_rack: 'Add Rack',
+        btn_profile_list: 'Profile List',
+        btn_part_list: 'Part List',
         btn_full_view: 'Full View',
         btn_floor_plan: 'Floor Plan',
         btn_3d_map: '3D Map',
@@ -799,13 +920,18 @@ const I18N = {
         modal_prof_rack: 'Storage Rack',
         modal_prof_tier: 'Level',
         modal_prof_layer: 'Layer Label',
-        modal_prof_code: 'Profile Code',
+        modal_prof_code: 'Profile Code (Auto-Assigned)',
         modal_prof_material: 'Material',
-        modal_prof_name: 'Profile Name *',
+        modal_prof_name: 'Profile / Part Name *',
+        modal_prof_name_ph: 'Search or select from Profile / Part List...',
+        modal_prof_select_hint: 'Select a registered Profile or Part above.',
+        modal_cat_title: 'Master Item List (Profile / Part List)',
+        modal_cat_rule_hint: 'Only registered items (ACTIVE: YES) can be added to warehouse racks.',
         modal_prof_length: 'Length (mm)',
         modal_prof_color: 'Color',
         modal_prof_qty: 'Current Quantity (EA)',
         modal_prof_minqty: 'Safety Stock (EA)',
+        modal_prof_minqty_hint: 'Safety stock is managed in Full Inventory',
         modal_move_title: 'Move / Split Stock Location',
         modal_move_rack: 'Target Rack',
         modal_move_tier: 'Target Level',
@@ -1979,6 +2105,10 @@ function renderSidePanel(data, activeTier = null) {
         const layerLabel = currentLang === 'en' ? formatTier(profile.tier || 1) : (profile.layer || formatTier(profile.tier || 1));
         const lengthText = getProfileLength(profile) || '-';
         const colorText = getProfileColor(profile) || '-';
+        const catItem = getCatalogItemByCode(profile.code);
+        const ozName = profile.oztechName || (catItem ? catItem.oztechName : '');
+        const itemType = profile.itemType || (catItem ? catItem.type : '');
+        const imgSrc = catItem && catItem.img ? catItem.img : '';
 
         const card = document.createElement('div');
         card.className = `p-3 rounded-xl cursor-pointer transition shadow-sm border ${
@@ -1991,8 +2121,9 @@ function renderSidePanel(data, activeTier = null) {
         card.innerHTML = `
             <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center flex-wrap gap-1.5 min-w-0">
-                    ${profile.code ? `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-700">${profile.code}</span>` : ''}
-                    <span class="text-[11px] font-semibold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">${layerLabel}</span>
+                    ${profile.code ? `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-700">${escapeHtml(profile.code)}</span>` : ''}
+                    ${itemType ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${itemType === 'PART' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'}">${escapeHtml(itemType)}</span>` : ''}
+                    <span class="text-[11px] font-semibold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">${escapeHtml(layerLabel)}</span>
                 </div>
                 <div class="text-right shrink-0">
                     <span class="text-base font-bold ${isLow ? 'text-amber-400' : 'text-emerald-400'}">${Number(profile.qty).toLocaleString()}</span>
@@ -2000,11 +2131,17 @@ function renderSidePanel(data, activeTier = null) {
                 </div>
             </div>
 
-            <h3 class="font-bold text-slate-100 text-sm mt-1.5 break-words">${profile.name}</h3>
+            <div class="mt-1.5 flex items-center gap-2.5">
+                ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-10 h-10 rounded-lg object-cover border border-slate-700 bg-white shrink-0">` : ''}
+                <div class="min-w-0">
+                    <h3 class="font-bold text-slate-100 text-sm break-words">${escapeHtml(profile.name)}</h3>
+                    ${ozName ? `<p class="text-[11px] text-slate-400 truncate">${escapeHtml(ozName)}</p>` : ''}
+                </div>
+            </div>
 
             <div class="mt-1.5 flex items-center justify-between gap-3 text-xs text-slate-400">
-                <span>${t('lbl_length')}: <strong class="text-slate-200 font-medium">${lengthText}</strong></span>
-                <span>${t('lbl_color')}: <strong class="text-slate-200 font-medium">${colorText}</strong></span>
+                <span>${t('lbl_length')}: <strong class="text-slate-200 font-medium">${escapeHtml(lengthText)}</strong></span>
+                <span>${t('lbl_color')}: <strong class="text-slate-200 font-medium">${escapeHtml(colorText)}</strong></span>
             </div>
 
             ${isSelected ? `
@@ -2138,10 +2275,226 @@ function onProfileTierSelectChange() {
     document.getElementById('profile-form-layer').value = formatTier(tierVal);
 }
 
+let profileCatalogTypeFilter = 'ALL';
+let profileCatalogMatches = [];
+let profileCatalogHighlightIdx = -1;
+let profileEditOriginalKey = null;
+
+function setProfileModalCatalogFilter(typeMode) {
+    profileCatalogTypeFilter = typeMode;
+    const map = {
+        ALL: 'prof-type-filter-all',
+        PROFILE: 'prof-type-filter-profile',
+        PART: 'prof-type-filter-part'
+    };
+    Object.entries(map).forEach(([k, id]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = k === typeMode
+            ? 'px-2 py-0.5 rounded font-bold bg-sky-500 text-slate-950 transition'
+            : 'px-2 py-0.5 rounded font-medium text-slate-300 hover:text-white transition';
+    });
+    renderProfileCatalogDropdown();
+}
+
+function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
+    const box = document.getElementById('profile-selected-preview');
+    if (!box) return;
+    if (catItem) {
+        const typeCls = catItem.type === 'PART'
+            ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+            : 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+        const metaParts = [catItem.product, catItem.madeIn, catItem.manufacture, catItem.moldNo].filter(Boolean);
+        box.innerHTML = `
+            ${catItem.img
+                ? `<img src="${escapeHtml(catItem.img)}" alt="" class="w-9 h-9 rounded-lg object-cover border border-slate-700 bg-white shrink-0">`
+                : `<div class="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-sky-400 shrink-0"><i class="fa-solid ${catItem.type === 'PART' ? 'fa-screwdriver-wrench' : 'fa-cubes'}"></i></div>`}
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="px-1.5 py-0.2 rounded border text-[9px] font-bold ${typeCls}">${escapeHtml(catItem.type)}</span>
+                    ${catItem.oztechName ? `<span class="text-slate-200 font-semibold truncate">${escapeHtml(catItem.oztechName)}</span>` : ''}
+                </div>
+                ${metaParts.length > 0 ? `<div class="text-[10px] text-slate-400 truncate mt-0.5">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
+            </div>
+        `;
+    } else if (fallbackLegacy) {
+        box.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400"></i><span class="text-amber-300 text-[10px]">${currentLang === 'en' ? 'Existing rack item (not in Profile/Part List). Pick a registered item above to assign a catalog code.' : '기존 랙 품목(리스트 미등록). 위에서 등록 품목을 선택하면 코드가 자동 부여됩니다.'}</span>`;
+    } else {
+        box.innerHTML = `<i class="fa-solid fa-circle-info text-slate-500"></i><span>${t('modal_prof_select_hint')}</span>`;
+    }
+}
+
+function setProfileCatalogSelection(catItem) {
+    if (!catItem) {
+        document.getElementById('profile-form-selected-code').value = '';
+        document.getElementById('profile-form-code').value = '';
+        renderProfileSelectedPreview(null);
+        return;
+    }
+    document.getElementById('profile-form-selected-code').value = catItem.code;
+    document.getElementById('profile-form-code').value = catItem.code;
+    document.getElementById('profile-form-name').value = catItem.partNameEng || catItem.oztechName || catItem.code;
+    renderProfileSelectedPreview(catItem);
+    hideProfileCatalogDropdown();
+}
+
+function getFilteredActiveCatalogForPicker(queryRaw) {
+    const q = String(queryRaw || '').trim().toUpperCase();
+    const activeItems = getActiveCatalogItems(profileCatalogTypeFilter);
+    if (!q) return activeItems.slice(0, 60);
+    return activeItems.filter(it =>
+        it.code.toUpperCase().includes(q) ||
+        it.partNameEng.toUpperCase().includes(q) ||
+        it.oztechName.toUpperCase().includes(q) ||
+        it.product.toUpperCase().includes(q) ||
+        it.manufacture.toUpperCase().includes(q) ||
+        it.moldNo.toUpperCase().includes(q)
+    ).slice(0, 60);
+}
+
+function renderProfileCatalogDropdown() {
+    const dropdown = document.getElementById('profile-catalog-dropdown');
+    const nameInput = document.getElementById('profile-form-name');
+    if (!dropdown || !nameInput) return;
+
+    profileCatalogMatches = getFilteredActiveCatalogForPicker(nameInput.value);
+    if (profileCatalogHighlightIdx >= profileCatalogMatches.length) {
+        profileCatalogHighlightIdx = profileCatalogMatches.length - 1;
+    }
+
+    dropdown.innerHTML = '';
+    if (profileCatalogMatches.length === 0) {
+        dropdown.innerHTML = `
+            <div class="p-3 text-center text-slate-400 text-[11px] space-y-1">
+                <div>${currentLang === 'en' ? 'No matching registered item (ACTIVE: YES) in Profile / Part List.' : 'Profile / Part List에 일치하는 등록 품목(ACTIVE: YES)이 없습니다.'}</div>
+                ${isAdminMode ? `<button type="button" onclick="openCatalogModal(profileCatalogTypeFilter === 'PART' ? 'PART' : 'PROFILE')" class="mt-1 px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-300 font-bold hover:bg-sky-500/30 transition">${currentLang === 'en' ? 'Open Master List' : '마스터 리스트 열기'}</button>` : ''}
+            </div>
+        `;
+        return;
+    }
+
+    profileCatalogMatches.forEach((it, idx) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        const isHl = idx === profileCatalogHighlightIdx;
+        row.className = `w-full text-left px-3 py-2 flex items-center gap-2.5 transition ${isHl ? 'bg-sky-500/20' : 'hover:bg-slate-800/90'}`;
+        const subMeta = [it.oztechName, it.product, it.madeIn, it.manufacture, it.moldNo].filter(Boolean).join(' · ');
+        const typeCls = it.type === 'PART'
+            ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+            : 'bg-sky-500/15 text-sky-300 border-sky-500/40';
+        row.innerHTML = `
+            ${it.img
+                ? `<img src="${escapeHtml(it.img)}" alt="" class="w-8 h-8 rounded object-cover border border-slate-700 bg-white shrink-0">`
+                : `<div class="w-8 h-8 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0"><i class="fa-solid ${it.type === 'PART' ? 'fa-screwdriver-wrench' : 'fa-cubes'} text-xs"></i></div>`}
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-slate-100 truncate">${escapeHtml(it.partNameEng || it.oztechName)}</span>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <span class="px-1.5 py-0.2 rounded border text-[9px] font-bold ${typeCls}">${escapeHtml(it.type)}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-700 text-sky-300 font-mono text-[10px] font-bold">${escapeHtml(it.code)}</span>
+                    </div>
+                </div>
+                ${subMeta ? `<div class="text-[10px] text-slate-400 truncate mt-0.5">${escapeHtml(subMeta)}</div>` : ''}
+            </div>
+        `;
+        row.onclick = () => setProfileCatalogSelection(it);
+        dropdown.appendChild(row);
+    });
+}
+
+function showProfileCatalogDropdown() {
+    const dropdown = document.getElementById('profile-catalog-dropdown');
+    if (!dropdown) return;
+    renderProfileCatalogDropdown();
+    dropdown.classList.remove('hidden');
+}
+
+function hideProfileCatalogDropdown() {
+    const dropdown = document.getElementById('profile-catalog-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    profileCatalogHighlightIdx = -1;
+}
+
+function toggleProfileCatalogDropdown() {
+    const dropdown = document.getElementById('profile-catalog-dropdown');
+    if (!dropdown) return;
+    if (dropdown.classList.contains('hidden')) {
+        showProfileCatalogDropdown();
+        document.getElementById('profile-form-name')?.focus();
+    } else {
+        hideProfileCatalogDropdown();
+    }
+}
+
+function findUniqueActiveCatalogMatchByName(rawText) {
+    const q = String(rawText || '').trim().toUpperCase();
+    if (!q) return null;
+    const matches = getActiveCatalogItems('ALL').filter(it =>
+        it.partNameEng.toUpperCase() === q ||
+        (it.oztechName && it.oztechName.toUpperCase() === q) ||
+        it.code.toUpperCase() === q
+    );
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function onProfileCatalogSearchInput() {
+    const nameInput = document.getElementById('profile-form-name');
+    const selectedCodeEl = document.getElementById('profile-form-selected-code');
+    const currentSelected = getCatalogItemByCode(selectedCodeEl.value);
+    const typed = (nameInput.value || '').trim();
+
+    if (!currentSelected || (currentSelected.partNameEng !== typed && currentSelected.oztechName !== typed)) {
+        const uniqueMatch = findUniqueActiveCatalogMatchByName(typed);
+        if (uniqueMatch) {
+            selectedCodeEl.value = uniqueMatch.code;
+            document.getElementById('profile-form-code').value = uniqueMatch.code;
+            renderProfileSelectedPreview(uniqueMatch);
+        } else {
+            selectedCodeEl.value = '';
+            document.getElementById('profile-form-code').value = '';
+            renderProfileSelectedPreview(null);
+        }
+    }
+    profileCatalogHighlightIdx = -1;
+    showProfileCatalogDropdown();
+}
+
+function onProfileNameInputKeydown(e) {
+    const dropdown = document.getElementById('profile-catalog-dropdown');
+    if (!dropdown || dropdown.classList.contains('hidden') || profileCatalogMatches.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        profileCatalogHighlightIdx = (profileCatalogHighlightIdx + 1) % profileCatalogMatches.length;
+        renderProfileCatalogDropdown();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        profileCatalogHighlightIdx = profileCatalogHighlightIdx <= 0 ? profileCatalogMatches.length - 1 : profileCatalogHighlightIdx - 1;
+        renderProfileCatalogDropdown();
+    } else if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+        const idx = profileCatalogHighlightIdx >= 0 ? profileCatalogHighlightIdx : 0;
+        const chosen = profileCatalogMatches[idx];
+        if (chosen) {
+            e.preventDefault();
+            e.stopPropagation();
+            setProfileCatalogSelection(chosen);
+        }
+    } else if (e.key === 'Escape') {
+        hideProfileCatalogDropdown();
+    }
+}
+
+document.addEventListener('click', (e) => {
+    const pickerWrap = document.getElementById('profile-name-picker-wrap');
+    if (pickerWrap && !pickerWrap.contains(e.target)) {
+        hideProfileCatalogDropdown();
+    }
+});
+
 function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefillItem = null) {
     const targetId = overrideBlockId || selectedBlockId;
     if (!targetId) {
-        showToast("먼저 품목을 관리할 랙을 선택해주세요.");
+        showToast(currentLang === 'en' ? 'Please select a rack first.' : '먼저 품목을 관리할 랙을 선택해주세요.');
         return;
     }
     const data = factoryBlocksData.find(b => b.id === targetId);
@@ -2151,24 +2504,39 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
     editingProfileIndex = profileIdx;
     modalOriginalBlockId = data.id;
     modalTargetBlockId = data.id;
+    profileEditOriginalKey = null;
+    setProfileModalCatalogFilter('ALL');
+    hideProfileCatalogDropdown();
 
     const modal = document.getElementById('profile-modal');
     const titleEl = document.getElementById('profile-modal-title');
 
     if (mode === 'edit' && profileIdx !== null && data.profiles[profileIdx]) {
         const item = data.profiles[profileIdx];
+        profileEditOriginalKey = `${(item.code || '').trim().toUpperCase()}::${(item.name || '').trim().toUpperCase()}`;
         titleEl.innerHTML = currentLang === 'en'
             ? `<i class="fa-solid fa-pen-to-square text-sky-400"></i> Edit Profile Item`
             : `<i class="fa-solid fa-pen-to-square text-sky-400"></i> 프로파일 품목 수정`;
         populateProfileRackAndTierSelects(data.id, item.tier || 1);
         document.getElementById('profile-form-layer').value = item.layer || formatTier(item.tier || 1);
-        document.getElementById('profile-form-code').value = item.code || '';
         document.getElementById('profile-form-material').value = item.material || 'A6063-T5';
-        document.getElementById('profile-form-name').value = item.name || '';
         document.getElementById('profile-form-length').value = extractLengthNumber(getProfileLength(item));
         document.getElementById('profile-form-color').value = getProfileColor(item);
         document.getElementById('profile-form-qty').value = item.qty ?? 0;
         document.getElementById('profile-form-minqty').value = item.minQty ?? 0;
+
+        const catMatch = getCatalogItemByCode(item.code) || findUniqueActiveCatalogMatchByName(item.name);
+        if (catMatch) {
+            document.getElementById('profile-form-selected-code').value = catMatch.code;
+            document.getElementById('profile-form-code').value = catMatch.code;
+            document.getElementById('profile-form-name').value = item.name || catMatch.partNameEng;
+            renderProfileSelectedPreview(catMatch);
+        } else {
+            document.getElementById('profile-form-selected-code').value = '';
+            document.getElementById('profile-form-code').value = item.code || '';
+            document.getElementById('profile-form-name').value = item.name || '';
+            renderProfileSelectedPreview(null, item);
+        }
     } else {
         const defaultTier = (!overrideBlockId && selectedTier) ? selectedTier : 1;
         const prefillLabel = prefillItem ? (prefillItem.code || prefillItem.name || '') : '';
@@ -2177,23 +2545,34 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
                 ? `<i class="fa-solid fa-code-branch text-sky-400"></i> Add Stock Location: [${prefillLabel}]`
                 : `<i class="fa-solid fa-code-branch text-sky-400"></i> [${prefillLabel}] 타 구역 추가 입고`)
             : (currentLang === 'en'
-                ? `<i class="fa-solid fa-box-open text-sky-400"></i> Add New Profile Item`
-                : `<i class="fa-solid fa-box-open text-sky-400"></i> 새 프로파일 품목 추가`);
+                ? `<i class="fa-solid fa-box-open text-sky-400"></i> Add Registered Item`
+                : `<i class="fa-solid fa-box-open text-sky-400"></i> 등록 품목 입고`);
         populateProfileRackAndTierSelects(data.id, defaultTier);
         document.getElementById('profile-form-layer').value = formatTier(defaultTier);
-        document.getElementById('profile-form-code').value = prefillItem ? (prefillItem.code || '') : '';
         document.getElementById('profile-form-material').value = prefillItem ? (prefillItem.material || 'A6063-T5') : 'A6063-T5';
-        document.getElementById('profile-form-name').value = prefillItem ? (prefillItem.name || '') : '';
         document.getElementById('profile-form-length').value = prefillItem ? (extractLengthNumber(getProfileLength(prefillItem)) || '6000') : '6000';
         document.getElementById('profile-form-color').value = prefillItem ? (getProfileColor(prefillItem) || (currentLang === 'en' ? 'Silver' : '실버')) : (currentLang === 'en' ? 'Silver' : '실버');
         document.getElementById('profile-form-qty').value = 100;
-        document.getElementById('profile-form-minqty').value = prefillItem ? (prefillItem.minQty ?? 30) : 30;
+        document.getElementById('profile-form-minqty').value = prefillItem ? (prefillItem.minQty ?? 0) : 0;
+
+        const prefillCat = prefillItem
+            ? (getCatalogItemByCode(prefillItem.code) || findUniqueActiveCatalogMatchByName(prefillItem.name))
+            : null;
+        if (prefillCat && prefillCat.active === 'YES') {
+            setProfileCatalogSelection(prefillCat);
+        } else {
+            document.getElementById('profile-form-selected-code').value = '';
+            document.getElementById('profile-form-code').value = '';
+            document.getElementById('profile-form-name').value = prefillItem ? (prefillItem.name || '') : '';
+            renderProfileSelectedPreview(null);
+        }
     }
 
     modal.classList.remove('hidden');
 }
 
 function closeProfileModal() {
+    hideProfileCatalogDropdown();
     document.getElementById('profile-modal').classList.add('hidden');
 }
 
@@ -2205,9 +2584,9 @@ function saveProfileModal() {
 
     const tier = parseInt(document.getElementById('profile-form-tier').value) || 1;
     const layer = document.getElementById('profile-form-layer').value.trim() || formatTier(tier);
-    const code = document.getElementById('profile-form-code').value.trim();
+    const selectedCode = document.getElementById('profile-form-selected-code').value.trim();
+    const typedName = document.getElementById('profile-form-name').value.trim();
     const material = document.getElementById('profile-form-material').value.trim() || 'A6063-T5';
-    const name = document.getElementById('profile-form-name').value.trim();
     const rawLen = document.getElementById('profile-form-length').value.trim();
     if (rawLen && (isNaN(Number(rawLen)) || Number(rawLen) < 0)) {
         showToast(currentLang === 'en' ? 'Length must be a valid number in mm.' : '길이는 숫자(mm)만 입력해주세요.');
@@ -2216,14 +2595,61 @@ function saveProfileModal() {
     const length = formatLengthMmValue(rawLen);
     const color = document.getElementById('profile-form-color').value.trim() || '-';
     const qty = Math.max(0, parseInt(document.getElementById('profile-form-qty').value) || 0);
-    const minQty = Math.max(0, parseInt(document.getElementById('profile-form-minqty').value) || 0);
+    let minQty = Math.max(0, parseInt(document.getElementById('profile-form-minqty').value) || 0);
 
-    if (!name) {
-        showToast(currentLang === 'en' ? 'Please enter a Profile Name.' : '품목명을 입력해주세요.');
-        return;
+    // 마스터 리스트 검증: 등록되고 ACTIVE=YES인 품목만 입력 허용 (기존 레거시 항목의 수량/규격 수정은 이름/코드 미변경 시 허용)
+    let resolvedCatalog = getCatalogItemByCode(selectedCode) || findUniqueActiveCatalogMatchByName(typedName);
+    let code = '';
+    let name = typedName;
+    let oztechName = '';
+    let itemType = '';
+
+    if (resolvedCatalog) {
+        if (resolvedCatalog.active !== 'YES') {
+            showToast(currentLang === 'en'
+                ? `[${resolvedCatalog.code}] is inactive (ACTIVE: NO) in the Master List.`
+                : `[${resolvedCatalog.code}] 품목은 마스터 리스트에서 비활성(ACTIVE: NO) 상태입니다.`);
+            return;
+        }
+        code = resolvedCatalog.code;
+        name = resolvedCatalog.partNameEng || resolvedCatalog.oztechName || resolvedCatalog.code;
+        oztechName = resolvedCatalog.oztechName || '';
+        itemType = resolvedCatalog.type || 'PROFILE';
+    } else {
+        const existingItem = (profileModalMode === 'edit' && origData && editingProfileIndex !== null)
+            ? origData.profiles[editingProfileIndex]
+            : null;
+        const currentKey = `${document.getElementById('profile-form-code').value.trim().toUpperCase()}::${typedName.toUpperCase()}`;
+        if (profileModalMode === 'edit' && existingItem && profileEditOriginalKey === currentKey) {
+            code = document.getElementById('profile-form-code').value.trim();
+            name = typedName || existingItem.name;
+            oztechName = existingItem.oztechName || '';
+            itemType = existingItem.itemType || '';
+        } else {
+            const q = typedName.toUpperCase();
+            const multiMatches = q ? getActiveCatalogItems('ALL').filter(it =>
+                it.partNameEng.toUpperCase() === q || (it.oztechName && it.oztechName.toUpperCase() === q)
+            ) : [];
+            showToast(multiMatches.length > 1
+                ? (currentLang === 'en'
+                    ? 'Multiple items match this name. Please select the exact Code from the dropdown.'
+                    : '동일한 이름의 품목이 여러 개 있습니다. 드롭다운에서 정확한 코드를 선택해주세요.')
+                : (currentLang === 'en'
+                    ? 'Only items registered (ACTIVE: YES) in Profile List / Part List can be added.'
+                    : 'Profile List 또는 Part List에 등록(ACTIVE: YES)된 품목만 랙에 입력할 수 있습니다.'));
+            showProfileCatalogDropdown();
+            document.getElementById('profile-form-name')?.focus();
+            return;
+        }
     }
 
-    const profileObj = { tier, code, name, length, color, qty, minQty, layer, material };
+    const tempKey = getProfileGroupKey({ code, name, length, color });
+    const existingGroup = getGroupedInventoryData().find(g => g.key === tempKey);
+    if (existingGroup) {
+        minQty = existingGroup.safetyStock;
+    }
+
+    const profileObj = { tier, code, name, oztechName, itemType, length, color, qty, minQty, layer, material };
     const groupKey = getProfileGroupKey(profileObj);
     const itemLabel = code || name;
 
@@ -3012,6 +3438,12 @@ function renderInventoryPage() {
             ? `<div class="text-[10px] text-slate-400">${currentLang === 'en' ? 'All' : '전체'}: ${grp.totalQty.toLocaleString()}</div>`
             : '';
 
+        const catInfo = getCatalogItemByCode(grp.code);
+        const catThumbHtml = (catInfo && catInfo.img)
+            ? `<img src="${escapeHtml(catInfo.img)}" alt="" class="w-7 h-7 rounded object-cover border border-slate-700 bg-white shrink-0">`
+            : '';
+        const catOzName = (catInfo && catInfo.oztechName) ? `<div class="text-[10px] text-slate-400 truncate max-w-[240px]">${escapeHtml(catInfo.oztechName)}</div>` : '';
+
         mainTr.innerHTML = `
             <td class="py-2.5 pl-4 pr-2 align-middle whitespace-nowrap">
                 <div class="flex items-center gap-2">
@@ -3021,7 +3453,13 @@ function renderInventoryPage() {
                 </div>
             </td>
             <td class="py-2.5 px-2 align-middle font-semibold text-slate-100">
-                <div class="truncate max-w-[240px]" title="${escapeHtml(grp.name)}">${escapeHtml(grp.name)}</div>
+                <div class="flex items-center gap-2 min-w-0">
+                    ${catThumbHtml}
+                    <div class="min-w-0">
+                        <div class="truncate max-w-[240px]" title="${escapeHtml(grp.name)}">${escapeHtml(grp.name)}</div>
+                        ${catOzName}
+                    </div>
+                </div>
             </td>
             <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300 font-mono">${escapeHtml(grp.length)}</td>
             <td class="py-2.5 px-2 align-middle whitespace-nowrap text-slate-300">${escapeHtml(grp.color)}</td>
@@ -3381,7 +3819,7 @@ function triggerExcelImport() {
 }
 
 function normalizeColKey(k) {
-    return String(k || '').trim().toLowerCase().replace(/[\s_\-()]/g, '');
+    return String(k || '').trim().toLowerCase().replace(/[\s_\-()./]/g, '');
 }
 
 function pickExcelCol(row, aliases, fallback = '') {
@@ -3435,8 +3873,8 @@ function handleExcelFileSelect(event) {
             const parsedInv = rawInv.map(row => {
                 const rackCode = String(pickExcelCol(row, ['RackCode', 'Rack', 'RackID', '랙코드', '랙', '보관랙', '구역'], '')).trim();
                 const profileCode = String(pickExcelCol(row, ['ProfileCode', 'Code', '프로파일코드', '코드', '품목코드'], '')).trim();
-                const profileName = String(pickExcelCol(row, ['ProfileName', 'Name', '품목명', '프로파일명'], '')).trim();
-                if (!rackCode || !profileCode) return null;
+                const profileName = String(pickExcelCol(row, ['ProfileName', 'PART NAME(Eng)', 'Name', '품목명', '프로파일명'], '')).trim();
+                if (!rackCode || (!profileCode && !profileName)) return null;
 
                 const tierNum = Math.max(1, parseInt(pickExcelCol(row, ['Tier', '단수', '단'], 1)) || 1);
                 const fac = normalizeFacValue(pickExcelCol(row, ['Facility', 'Fac', '동', '소속동'], ''), rackCode);
@@ -3586,11 +4024,13 @@ function applyExcelImport(mode) {
 
         inventoryRows.forEach(row => {
             const block = ensureRackExistsFromImport(row);
+            const rowGroupKey = getProfileGroupKey(row);
             const existingItem = block.profiles.find(p =>
-                (p.code || '').trim().toUpperCase() === row.code.toUpperCase() &&
+                getProfileGroupKey(p) === rowGroupKey &&
                 (p.tier || 1) === row.tier
             );
             if (existingItem) {
+                existingItem.code = row.code;
                 existingItem.name = row.name;
                 existingItem.length = row.length;
                 existingItem.color = row.color;
@@ -3881,11 +4321,14 @@ async function downloadShareableHtml() {
     const closingScriptTag = '</' + 'script>';
     const safeJson = JSON.stringify(factoryBlocksData, null, 12)
         .replace(new RegExp('<\\/' + 'script', 'gi'), '<\\\\/' + 'script');
+    const safeCatalogJson = JSON.stringify(masterCatalogData, null, 12)
+        .replace(new RegExp('<\\/' + 'script', 'gi'), '<\\\\/' + 'script');
 
     const bakedReplacement =
         startMarker + '\n' +
         'const DEFAULT_DATA_REVISION = ' + newRevision + ';\n' +
         'const DEFAULT_FACTORY_BLOCKS_DATA = ' + safeJson + ';\n' +
+        'const DEFAULT_MASTER_CATALOG_DATA = ' + safeCatalogJson + ';\n' +
         endMarker;
 
     let finalHtml = '';
@@ -3956,6 +4399,7 @@ function downloadDataJson() {
     const payload = {
         revision: Date.now(),
         updatedAt: new Date().toISOString(),
+        catalog: masterCatalogData,
         blocks: factoryBlocksData
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -4281,21 +4725,65 @@ function assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows) {
     return normalizeBlocksArray(blocks);
 }
 
+function isMissingCatalogTableError(err) {
+    const msg = String((err && err.message) || '').toLowerCase();
+    const code = String((err && err.code) || '');
+    return code === '42P01' || code === 'PGRST205' || msg.includes('catalog_items');
+}
+
+function buildCatalogRowsForSupabase(items) {
+    const now = new Date().toISOString();
+    return (items || []).map(it => ({
+        code: String(it.code),
+        item_no: Math.max(1, parseInt(it.no) || 1),
+        product: String(it.product || ''),
+        item_type: it.type === 'PART' ? 'PART' : 'PROFILE',
+        made_in: String(it.madeIn || ''),
+        active: it.active === 'NO' ? 'NO' : 'YES',
+        manufacture: String(it.manufacture || ''),
+        part_name_eng: String(it.partNameEng || ''),
+        oztech_name: String(it.oztechName || ''),
+        mold_no: String(it.moldNo || ''),
+        weight: String(it.weight || ''),
+        img: String(it.img || ''),
+        updated_at: now
+    }));
+}
+
+function applyRemoteCatalogFromCloud(catalogRows) {
+    if (!Array.isArray(catalogRows)) return;
+    const normalized = normalizeCatalogArray(catalogRows);
+    if (normalized.length === 0) return;
+    if (JSON.stringify(normalized) === JSON.stringify(masterCatalogData)) return;
+    masterCatalogData = normalized;
+    saveMasterCatalog(false);
+    if (typeof renderCatalogTable === 'function') {
+        const modal = document.getElementById('catalog-modal');
+        if (modal && !modal.classList.contains('hidden')) renderCatalogTable();
+    }
+    const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+    if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+    if (currentPage === 'inventory') renderInventoryPage();
+}
+
 async function fetchNormalizedFromSupabase() {
-    const [rackRes, profileRes, invRes] = await Promise.all([
+    const [rackRes, profileRes, invRes, catRes] = await Promise.all([
         supabaseClient.from('racks').select('*').order('sort_order', { ascending: true }),
         supabaseClient.from('profiles').select('*'),
-        supabaseClient.from('rack_inventory').select('*')
+        supabaseClient.from('rack_inventory').select('*'),
+        supabaseClient.from('catalog_items').select('*').order('item_no', { ascending: true })
     ]);
 
     if (rackRes.error) throw rackRes.error;
     if (profileRes.error) throw profileRes.error;
     if (invRes.error) throw invRes.error;
+    if (catRes.error && !isMissingCatalogTableError(catRes.error)) throw catRes.error;
 
     return {
         rackRows: rackRes.data || [],
         profileRows: profileRes.data || [],
-        invRows: invRes.data || []
+        invRows: invRes.data || [],
+        catalogRows: (!catRes.error && Array.isArray(catRes.data)) ? catRes.data : null
     };
 }
 
@@ -4391,7 +4879,10 @@ function scheduleRealtimePull() {
         realtimePullTimer = null;
         if (isPushingToCloud || !supabaseClient) return;
         try {
-            const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
+            const { rackRows, profileRows, invRows, catalogRows } = await fetchNormalizedFromSupabase();
+            if (catalogRows && catalogRows.length > 0) {
+                applyRemoteCatalogFromCloud(catalogRows);
+            }
             if (rackRows.length === 0) return;
             const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
             if (computeDataHash(assembled) === computeDataHash(factoryBlocksData)) return;
@@ -4416,6 +4907,7 @@ function subscribeSupabaseRealtime() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'racks' }, scheduleRealtimePull)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleRealtimePull)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rack_inventory' }, scheduleRealtimePull)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog_items' }, scheduleRealtimePull)
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 setCloudStatus('connected', currentLang === 'en' ? 'Connected (racks / profiles / rack_inventory)' : 'Supabase 정규화 테이블 실시간 동기화 연결됨');
@@ -4437,7 +4929,10 @@ async function initSupabaseConnection() {
         setCloudStatus('syncing', currentLang === 'en' ? 'Connecting to Supabase...' : 'Supabase 연결 중...');
         supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
 
-        const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
+        const { rackRows, profileRows, invRows, catalogRows } = await fetchNormalizedFromSupabase();
+        if (catalogRows && catalogRows.length > 0) {
+            applyRemoteCatalogFromCloud(catalogRows);
+        }
 
         if (rackRows.length > 0) {
             const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
@@ -4535,6 +5030,31 @@ async function pushDataToSupabase({ silent = false } = {}) {
             if (delRackErr) throw delRackErr;
         }
 
+        // 마스터 물품 리스트(catalog_items) 동기화 (테이블 미생성 시 기존 재고 동기화 방해 없이 건너뜀)
+        const catalogRows = buildCatalogRowsForSupabase(masterCatalogData);
+        let catalogTableAvailable = true;
+        if (catalogRows.length > 0) {
+            const { error: catUpsertErr } = await supabaseClient
+                .from('catalog_items')
+                .upsert(catalogRows, { onConflict: 'code' });
+            if (catUpsertErr) {
+                if (isMissingCatalogTableError(catUpsertErr)) catalogTableAvailable = false;
+                else throw catUpsertErr;
+            }
+        }
+        if (catalogTableAvailable) {
+            const { data: remoteCatCodes, error: selCatErr } = await supabaseClient.from('catalog_items').select('code');
+            if (selCatErr && !isMissingCatalogTableError(selCatErr)) throw selCatErr;
+            if (!selCatErr) {
+                const currentCatSet = new Set(catalogRows.map(r => r.code));
+                const removedCatCodes = (remoteCatCodes || []).map(r => r.code).filter(c => !currentCatSet.has(c));
+                if (removedCatCodes.length > 0) {
+                    const { error: delCatErr } = await supabaseClient.from('catalog_items').delete().in('code', removedCatCodes);
+                    if (delCatErr) throw delCatErr;
+                }
+            }
+        }
+
         lastSyncedHash = computeDataHash(factoryBlocksData);
         currentSourceHash = lastSyncedHash;
         lastCloudSyncAt = updatedAt;
@@ -4579,7 +5099,10 @@ async function pullDataFromSupabase({ silent = false } = {}) {
 
     try {
         setCloudStatus('syncing', currentLang === 'en' ? 'Fetching from Supabase...' : '서버 데이터 불러오는 중...');
-        const { rackRows, profileRows, invRows } = await fetchNormalizedFromSupabase();
+        const { rackRows, profileRows, invRows, catalogRows } = await fetchNormalizedFromSupabase();
+        if (catalogRows && catalogRows.length > 0) {
+            applyRemoteCatalogFromCloud(catalogRows);
+        }
         if (rackRows.length === 0) {
             setCloudStatus('connected', currentLang === 'en' ? 'No remote racks yet.' : '서버에 저장된 랙 데이터가 아직 없습니다.');
             if (!silent) {
@@ -4704,9 +5227,26 @@ function copySupabaseSql() {
         `create index if not exists idx_rack_inventory_rack_id on public.rack_inventory(rack_id);`,
         `create index if not exists idx_rack_inventory_profile_code on public.rack_inventory(profile_code);`,
         ``,
+        `create table if not exists public.catalog_items (`,
+        `  code text primary key,`,
+        `  item_no integer not null default 1,`,
+        `  product text not null default '',`,
+        `  item_type text not null default 'PROFILE' check (item_type in ('PROFILE', 'PART')),`,
+        `  made_in text not null default '',`,
+        `  active text not null default 'YES' check (active in ('YES', 'NO')),`,
+        `  manufacture text not null default '',`,
+        `  part_name_eng text not null default '',`,
+        `  oztech_name text not null default '',`,
+        `  mold_no text not null default '',`,
+        `  weight text not null default '',`,
+        `  img text not null default '',`,
+        `  updated_at timestamptz not null default now()`,
+        `);`,
+        ``,
         `alter table public.racks enable row level security;`,
         `alter table public.profiles enable row level security;`,
         `alter table public.rack_inventory enable row level security;`,
+        `alter table public.catalog_items enable row level security;`,
         ``,
         `drop policy if exists "racks_public_all" on public.racks;`,
         `create policy "racks_public_all" on public.racks for all using (true) with check (true);`,
@@ -4714,17 +5254,20 @@ function copySupabaseSql() {
         `create policy "profiles_public_all" on public.profiles for all using (true) with check (true);`,
         `drop policy if exists "rack_inventory_public_all" on public.rack_inventory;`,
         `create policy "rack_inventory_public_all" on public.rack_inventory for all using (true) with check (true);`,
+        `drop policy if exists "catalog_items_public_all" on public.catalog_items;`,
+        `create policy "catalog_items_public_all" on public.catalog_items for all using (true) with check (true);`,
         ``,
         `do $$ begin`,
         `  begin alter publication supabase_realtime add table public.racks; exception when duplicate_object then null; end;`,
         `  begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;`,
         `  begin alter publication supabase_realtime add table public.rack_inventory; exception when duplicate_object then null; end;`,
+        `  begin alter publication supabase_realtime add table public.catalog_items; exception when duplicate_object then null; end;`,
         `end $$;`
     ].join('\n');
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(sql).then(() => {
-            showToast(currentLang === 'en' ? 'Copied normalized SQL (3 tables) to clipboard!' : '3개 정규화 테이블 SQL이 클립보드에 복사되었습니다!');
+            showToast(currentLang === 'en' ? 'Copied normalized SQL (4 tables) to clipboard!' : '4개 정규화 테이블 SQL이 클립보드에 복사되었습니다!');
         }).catch(() => {
             showToast(currentLang === 'en' ? 'Clipboard copy failed.' : '클립보드 복사에 실패했습니다.');
         });
@@ -4810,6 +5353,675 @@ function lockAdminMode() {
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
     applyAdminVisibility();
     showToast(currentLang === 'en' ? 'Admin mode locked.' : '관리자 모드가 잠금 상태로 전환되었습니다.');
+}
+
+/**
+ * 11. 회사 마스터 물품 리스트 관리 모달 (Profile List / Part List)
+ */
+let currentCatalogTab = 'PROFILE'; // 'PROFILE' | 'PART'
+let editingCatalogCode = null;
+let pendingImgUploadTarget = null; // 'form' | catalogCode
+let catalogSortKey = 'no';
+let catalogSortDir = 'asc';
+
+function normalizeCountryPrefix2(madeInRaw) {
+    const trimmed = String(madeInRaw || '').trim().toUpperCase();
+    const koMap = {
+        '한국': 'KO', '대한민국': 'KO',
+        '말레이시아': 'MA',
+        '중국': 'CH',
+        '호주': 'AU',
+        '베트남': 'VI',
+        '대만': 'TA',
+        '일본': 'JP',
+        '미국': 'US',
+        '태국': 'TH',
+        '인도네시아': 'IN'
+    };
+    for (const [k, v] of Object.entries(koMap)) {
+        if (trimmed.includes(k)) return v;
+    }
+    return trimmed.replace(/[^A-Z0-9]/g, '').slice(0, 2);
+}
+
+function generateCatalogCode({ product, type, madeIn, active, no }) {
+    const prod2 = String(product || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2);
+    const type1 = String(type || 'PROFILE').trim().toUpperCase().charAt(0) || 'P';
+    const country2 = normalizeCountryPrefix2(madeIn);
+    const active1 = String(active || 'YES').trim().toUpperCase() === 'YES' ? 'A' : 'N';
+    const noNum = parseInt(no);
+    const noStr = (!isNaN(noNum) && noNum > 0) ? String(noNum) : '';
+    if (!prod2 || prod2.length < 2 || !country2 || country2.length < 2 || !noStr) return '';
+    return `${prod2}-${type1}${country2}-${active1}${noStr}`;
+}
+
+function updateCatalogAutoCodePreview() {
+    const codeInput = document.getElementById('cat-form-code');
+    if (!codeInput) return;
+    const generated = generateCatalogCode({
+        product: document.getElementById('cat-form-product')?.value,
+        type: document.getElementById('cat-form-type')?.value,
+        madeIn: document.getElementById('cat-form-madein')?.value,
+        active: document.getElementById('cat-form-active')?.value,
+        no: document.getElementById('cat-form-no')?.value
+    });
+    codeInput.value = generated;
+}
+
+function openCatalogFormPanel() {
+    const panel = document.getElementById('cat-form-panel');
+    if (panel) panel.classList.remove('hidden');
+}
+
+function closeCatalogFormPanel() {
+    const panel = document.getElementById('cat-form-panel');
+    if (panel) panel.classList.add('hidden');
+    editingCatalogCode = null;
+}
+
+function toggleCatalogFormPanel() {
+    const panel = document.getElementById('cat-form-panel');
+    if (!panel) return;
+    if (panel.classList.contains('hidden')) {
+        resetCatalogForm();
+        openCatalogFormPanel();
+        document.getElementById('cat-form-product')?.focus();
+    } else {
+        closeCatalogFormPanel();
+    }
+}
+
+function openCatalogModal(tabType = 'PROFILE') {
+    if (!requireAdminAccess()) return;
+    currentCatalogTab = tabType === 'PART' ? 'PART' : 'PROFILE';
+    switchCatalogTab(currentCatalogTab);
+    document.getElementById('catalog-modal').classList.remove('hidden');
+}
+
+function closeCatalogModal() {
+    closeCatalogFormPanel();
+    document.getElementById('catalog-modal').classList.add('hidden');
+}
+
+function updateCatalogTabBadges() {
+    const profCount = masterCatalogData.filter(it => it.type === 'PROFILE').length;
+    const partCount = masterCatalogData.filter(it => it.type === 'PART').length;
+    const profBadge = document.getElementById('cat-count-profile');
+    const partBadge = document.getElementById('cat-count-part');
+    if (profBadge) profBadge.textContent = profCount;
+    if (partBadge) partBadge.textContent = partCount;
+}
+
+function switchCatalogTab(tabType) {
+    currentCatalogTab = tabType === 'PART' ? 'PART' : 'PROFILE';
+    const profTab = document.getElementById('cat-tab-profile');
+    const partTab = document.getElementById('cat-tab-part');
+    if (profTab && partTab) {
+        profTab.className = currentCatalogTab === 'PROFILE'
+            ? 'px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition flex items-center gap-1.5'
+            : 'px-3 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5';
+        partTab.className = currentCatalogTab === 'PART'
+            ? 'px-3 py-1 rounded-lg text-xs font-bold bg-violet-500 text-white transition flex items-center gap-1.5'
+            : 'px-3 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5';
+    }
+    const regText = document.getElementById('cat-btn-register-text');
+    if (regText) {
+        regText.textContent = currentLang === 'en'
+            ? `Register New ${currentCatalogTab}`
+            : `신규 ${currentCatalogTab} 등록`;
+    }
+    const prodFilter = document.getElementById('cat-filter-product');
+    const madeInFilter = document.getElementById('cat-filter-madein');
+    if (prodFilter) prodFilter.value = 'ALL';
+    if (madeInFilter) madeInFilter.value = 'ALL';
+
+    resetCatalogForm();
+    closeCatalogFormPanel();
+    renderCatalogTable();
+}
+
+function getNextCatalogNoForType(typeVal) {
+    const items = masterCatalogData.filter(it => it.type === typeVal);
+    if (items.length === 0) return 1;
+    return Math.max(...items.map(it => Number(it.no) || 0)) + 1;
+}
+
+function updateCatalogFormImagePreview() {
+    const url = (document.getElementById('cat-form-img')?.value || '').trim();
+    const imgEl = document.getElementById('cat-form-img-preview');
+    if (!imgEl) return;
+    if (url) {
+        imgEl.src = url;
+        imgEl.classList.remove('hidden');
+    } else {
+        imgEl.src = '';
+        imgEl.classList.add('hidden');
+    }
+}
+
+function resetCatalogForm() {
+    editingCatalogCode = null;
+    document.getElementById('cat-form-no').value = getNextCatalogNoForType(currentCatalogTab);
+    document.getElementById('cat-form-code').value = '';
+    document.getElementById('cat-form-product').value = '';
+    document.getElementById('cat-form-type').value = currentCatalogTab;
+    document.getElementById('cat-form-madein').value = '';
+    document.getElementById('cat-form-active').value = 'YES';
+    document.getElementById('cat-form-mfg').value = '';
+    document.getElementById('cat-form-eng').value = '';
+    document.getElementById('cat-form-oz').value = '';
+    document.getElementById('cat-form-mold').value = '';
+    document.getElementById('cat-form-weight').value = '';
+    document.getElementById('cat-form-img').value = '';
+    updateCatalogFormImagePreview();
+    updateCatalogAutoCodePreview();
+
+    const lbl = document.getElementById('cat-form-mode-label');
+    if (lbl) {
+        lbl.innerHTML = `<i class="fa-solid fa-plus-circle"></i> ${currentLang === 'en' ? `Register New ${currentCatalogTab}` : `신규 ${currentCatalogTab} 등록`}`;
+    }
+    const saveBtn = document.getElementById('cat-form-save-btn');
+    if (saveBtn) {
+        saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${currentLang === 'en' ? 'Save Item' : '등록 저장'}`;
+    }
+}
+
+function editCatalogItem(code) {
+    const item = getCatalogItemByCode(code);
+    if (!item) return;
+    editingCatalogCode = item.code;
+    openCatalogFormPanel();
+    document.getElementById('cat-form-no').value = item.no || 1;
+    document.getElementById('cat-form-product').value = item.product || '';
+    document.getElementById('cat-form-type').value = item.type || currentCatalogTab;
+    document.getElementById('cat-form-madein').value = item.madeIn || '';
+    document.getElementById('cat-form-active').value = item.active || 'YES';
+    document.getElementById('cat-form-mfg').value = item.manufacture || '';
+    document.getElementById('cat-form-eng').value = item.partNameEng || '';
+    document.getElementById('cat-form-oz').value = item.oztechName || '';
+    document.getElementById('cat-form-mold').value = item.moldNo || '';
+    document.getElementById('cat-form-weight').value = item.weight || '';
+    document.getElementById('cat-form-img').value = item.img || '';
+    updateCatalogFormImagePreview();
+    updateCatalogAutoCodePreview();
+    const codeInput = document.getElementById('cat-form-code');
+    if (codeInput && !codeInput.value) codeInput.value = item.code;
+
+    const lbl = document.getElementById('cat-form-mode-label');
+    if (lbl) {
+        lbl.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-400"></i> ${currentLang === 'en' ? `Editing [${item.code}]` : `[${item.code}] 수정 중`}`;
+    }
+    const saveBtn = document.getElementById('cat-form-save-btn');
+    if (saveBtn) {
+        saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${currentLang === 'en' ? 'Update Item' : '수정 저장'}`;
+    }
+}
+
+function syncCatalogChangesToRacks(oldCode, item) {
+    const oldUpper = String(oldCode || '').trim().toUpperCase();
+    const newUpper = item.code.toUpperCase();
+    let anyUpdated = false;
+    factoryBlocksData.forEach(block => {
+        (block.profiles || []).forEach(p => {
+            const pCodeUpper = String(p.code || '').trim().toUpperCase();
+            if (pCodeUpper === oldUpper || pCodeUpper === newUpper) {
+                p.code = item.code;
+                p.name = item.partNameEng || item.oztechName || item.code;
+                p.oztechName = item.oztechName || '';
+                p.itemType = item.type;
+                anyUpdated = true;
+            }
+        });
+    });
+    if (anyUpdated) {
+        saveFactoryData();
+        const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+        if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+        if (currentPage === 'inventory') renderInventoryPage();
+    }
+}
+
+function saveCatalogItemForm() {
+    const no = Math.max(1, parseInt(document.getElementById('cat-form-no').value) || getNextCatalogNoForType(currentCatalogTab));
+    const product = document.getElementById('cat-form-product').value.trim().toUpperCase();
+    const type = document.getElementById('cat-form-type').value === 'PART' ? 'PART' : 'PROFILE';
+    const madeIn = document.getElementById('cat-form-madein').value.trim().toUpperCase();
+    const active = document.getElementById('cat-form-active').value === 'NO' ? 'NO' : 'YES';
+    const manufacture = document.getElementById('cat-form-mfg').value.trim();
+    const partNameEng = document.getElementById('cat-form-eng').value.trim();
+    const oztechName = document.getElementById('cat-form-oz').value.trim();
+    const moldNo = document.getElementById('cat-form-mold').value.trim();
+    const weight = document.getElementById('cat-form-weight').value.trim();
+    const img = document.getElementById('cat-form-img').value.trim();
+
+    const code = generateCatalogCode({ product, type, madeIn, active, no });
+    if (!code) {
+        showToast(currentLang === 'en'
+            ? 'Enter Product (2+ chars), MADE IN (2+ chars), and No. to auto-generate Code.'
+            : '코드 자동 생성을 위해 Product(2자 이상), MADE IN(2자 이상), No.를 입력해주세요.');
+        return;
+    }
+
+    if (!partNameEng && !oztechName) {
+        showToast(currentLang === 'en'
+            ? 'Please enter PART NAME(Eng).'
+            : 'PART NAME(Eng)를 입력해주세요.');
+        return;
+    }
+
+    const dup = masterCatalogData.find(it =>
+        it.code.toUpperCase() === code.toUpperCase() &&
+        (!editingCatalogCode || it.code.toUpperCase() !== editingCatalogCode.toUpperCase())
+    );
+    if (dup) {
+        showToast(currentLang === 'en'
+            ? `Generated Code [${code}] already exists. Change No. or edit the existing row.`
+            : `자동 생성된 코드 [${code}]가 이미 존재합니다. No.를 변경하거나 기존 항목을 수정하세요.`);
+        return;
+    }
+
+    const itemObj = normalizeCatalogItem({
+        no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, moldNo, weight, img
+    });
+
+    if (editingCatalogCode) {
+        const idx = masterCatalogData.findIndex(it => it.code.toUpperCase() === editingCatalogCode.toUpperCase());
+        const prevCode = editingCatalogCode;
+        if (idx !== -1) {
+            masterCatalogData[idx] = itemObj;
+        } else {
+            masterCatalogData.push(itemObj);
+        }
+        syncCatalogChangesToRacks(prevCode, itemObj);
+        showToast(currentLang === 'en' ? `Updated [${code}].` : `[${code}] 정보가 수정되었습니다.`);
+    } else {
+        masterCatalogData.push(itemObj);
+        showToast(currentLang === 'en' ? `Registered [${code}] to ${type} List.` : `[${code}]이(가) ${type} 리스트에 등록되었습니다.`);
+    }
+
+    saveMasterCatalog();
+    closeCatalogFormPanel();
+    if (itemObj.type !== currentCatalogTab) {
+        switchCatalogTab(itemObj.type);
+    } else {
+        renderCatalogTable();
+    }
+}
+
+function toggleCatalogActive(code) {
+    const item = getCatalogItemByCode(code);
+    if (!item) return;
+    item.active = item.active === 'YES' ? 'NO' : 'YES';
+    saveMasterCatalog();
+    renderCatalogTable();
+}
+
+function deleteCatalogItem(code) {
+    const item = getCatalogItemByCode(code);
+    if (!item) return;
+    openConfirmModal(
+        currentLang === 'en' ? 'Delete Master Item' : '마스터 품목 삭제',
+        currentLang === 'en'
+            ? `Remove [${item.code}] '${item.partNameEng || item.oztechName}' from the ${item.type} List?`
+            : `[${item.code}] '${item.partNameEng || item.oztechName}' 항목을 ${item.type} 리스트에서 삭제하시겠습니까?`,
+        () => {
+            masterCatalogData = masterCatalogData.filter(it => it.code.toUpperCase() !== item.code.toUpperCase());
+            saveMasterCatalog();
+            if (editingCatalogCode && editingCatalogCode.toUpperCase() === item.code.toUpperCase()) {
+                resetCatalogForm();
+            }
+            renderCatalogTable();
+            showToast(currentLang === 'en' ? `Deleted [${item.code}].` : `[${item.code}] 삭제 완료`);
+        }
+    );
+}
+
+function triggerCatalogImageUpload(target) {
+    pendingImgUploadTarget = target;
+    const input = document.getElementById('cat-img-file-input');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+function handleCatalogImageFileSelect(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const maxDim = 160;
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+            if (pendingImgUploadTarget === 'form') {
+                const urlInput = document.getElementById('cat-form-img');
+                if (urlInput) urlInput.value = dataUrl;
+                updateCatalogFormImagePreview();
+            } else if (pendingImgUploadTarget) {
+                const item = getCatalogItemByCode(pendingImgUploadTarget);
+                if (item) {
+                    item.img = dataUrl;
+                    saveMasterCatalog();
+                    renderCatalogTable();
+                    if (editingCatalogCode && editingCatalogCode.toUpperCase() === item.code.toUpperCase()) {
+                        document.getElementById('cat-form-img').value = dataUrl;
+                        updateCatalogFormImagePreview();
+                    }
+                }
+            }
+            pendingImgUploadTarget = null;
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function setCatalogSort(key) {
+    if (catalogSortKey === key) {
+        catalogSortDir = catalogSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        catalogSortKey = key;
+        catalogSortDir = (key === 'weight') ? 'desc' : 'asc';
+    }
+    renderCatalogTable();
+}
+
+function updateCatalogSortIndicators() {
+    const keys = ['no', 'code', 'product', 'type', 'madeIn', 'active', 'manufacture', 'partNameEng', 'oztechName', 'moldNo', 'weight'];
+    keys.forEach(k => {
+        const el = document.getElementById(`cat-sort-ind-${k}`);
+        if (!el) return;
+        el.textContent = (k === catalogSortKey) ? (catalogSortDir === 'asc' ? '▲' : '▼') : '';
+    });
+}
+
+function populateCatalogFilterOptions() {
+    const tabItems = masterCatalogData.filter(it => it.type === currentCatalogTab);
+    const prodSelect = document.getElementById('cat-filter-product');
+    const madeInSelect = document.getElementById('cat-filter-madein');
+
+    if (prodSelect) {
+        const prev = prodSelect.value || 'ALL';
+        const products = Array.from(new Set(tabItems.map(it => it.product).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        prodSelect.innerHTML = `<option value="ALL">Product: ALL</option>` +
+            products.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+        prodSelect.value = (prev !== 'ALL' && products.includes(prev)) ? prev : 'ALL';
+    }
+    if (madeInSelect) {
+        const prev = madeInSelect.value || 'ALL';
+        const countries = Array.from(new Set(tabItems.map(it => it.madeIn).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        madeInSelect.innerHTML = `<option value="ALL">MADE IN: ALL</option>` +
+            countries.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        madeInSelect.value = (prev !== 'ALL' && countries.includes(prev)) ? prev : 'ALL';
+    }
+}
+
+function renderCatalogTable() {
+    updateCatalogTabBadges();
+    populateCatalogFilterOptions();
+    updateCatalogSortIndicators();
+    const tbody = document.getElementById('cat-table-body');
+    if (!tbody) return;
+
+    const query = (document.getElementById('cat-search-input')?.value || '').trim().toUpperCase();
+    const activeFilter = document.getElementById('cat-filter-active')?.value || 'ALL';
+    const prodFilter = document.getElementById('cat-filter-product')?.value || 'ALL';
+    const madeInFilter = document.getElementById('cat-filter-madein')?.value || 'ALL';
+
+    const rows = masterCatalogData.filter(it => {
+        if (it.type !== currentCatalogTab) return false;
+        if (activeFilter !== 'ALL' && it.active !== activeFilter) return false;
+        if (prodFilter !== 'ALL' && it.product !== prodFilter) return false;
+        if (madeInFilter !== 'ALL' && it.madeIn !== madeInFilter) return false;
+        if (query) {
+            return (
+                it.code.toUpperCase().includes(query) ||
+                it.product.toUpperCase().includes(query) ||
+                it.madeIn.toUpperCase().includes(query) ||
+                it.manufacture.toUpperCase().includes(query) ||
+                it.partNameEng.toUpperCase().includes(query) ||
+                it.oztechName.toUpperCase().includes(query) ||
+                it.moldNo.toUpperCase().includes(query)
+            );
+        }
+        return true;
+    });
+
+    const dir = catalogSortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+        if (catalogSortKey === 'no') {
+            return ((Number(a.no) || 0) - (Number(b.no) || 0)) * dir;
+        }
+        if (catalogSortKey === 'weight') {
+            return ((parseFloat(a.weight) || 0) - (parseFloat(b.weight) || 0)) * dir;
+        }
+        const cmp = String(a[catalogSortKey] || '').localeCompare(String(b[catalogSortKey] || ''), 'ko', { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) return cmp * dir;
+        return (Number(a.no) || 0) - (Number(b.no) || 0);
+    });
+
+    tbody.innerHTML = '';
+    if (rows.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="13" class="py-12 text-center text-slate-400">
+                    ${currentLang === 'en' ? `No items in ${currentCatalogTab} List matching your filter.` : `${currentCatalogTab} 리스트에 해당하는 항목이 없습니다.`}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    rows.forEach(it => {
+        const jsCode = escapeJsAttr(it.code);
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-slate-800/70 transition ${it.active === 'NO' ? 'opacity-55' : ''}`;
+        const activeCls = it.active === 'YES'
+            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+            : 'bg-slate-800 text-slate-400 border-slate-700';
+        const typeCls = it.type === 'PART'
+            ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
+            : 'bg-sky-500/15 text-sky-300 border-sky-500/30';
+
+        tr.innerHTML = `
+            <td class="py-2 pl-4 pr-2 font-mono text-slate-400 whitespace-nowrap">${it.no}</td>
+            <td class="py-2 px-2 font-mono font-bold text-sky-300 whitespace-nowrap">${escapeHtml(it.code)}</td>
+            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.product || '-')}</td>
+            <td class="py-2 px-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${typeCls}">${escapeHtml(it.type)}</span></td>
+            <td class="py-2 px-2 text-slate-300 whitespace-nowrap">${escapeHtml(it.madeIn || '-')}</td>
+            <td class="py-2 px-2 text-center whitespace-nowrap">
+                <button onclick="toggleCatalogActive('${jsCode}')" class="px-2 py-0.5 rounded border text-[10px] font-bold transition ${activeCls}" title="Click to toggle YES/NO">${it.active}</button>
+            </td>
+            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.manufacture || '-')}</td>
+            <td class="py-2 px-2 text-slate-100 font-semibold">${escapeHtml(it.partNameEng)}</td>
+            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.oztechName || '-')}</td>
+            <td class="py-2 px-2 font-mono text-slate-300 whitespace-nowrap">${escapeHtml(it.moldNo || '-')}</td>
+            <td class="py-2 px-2 font-mono text-amber-200 text-right whitespace-nowrap">${escapeHtml(it.weight || '-')}</td>
+            <td class="py-2 px-2 text-center whitespace-nowrap">
+                <button onclick="triggerCatalogImageUpload('${jsCode}')" class="inline-flex items-center justify-center w-9 h-7 rounded border border-slate-700 bg-slate-800 hover:border-sky-400 overflow-hidden transition" title="Upload / Change Image">
+                    ${it.img ? `<img src="${escapeHtml(it.img)}" alt="" class="w-full h-full object-cover bg-white">` : `<i class="fa-solid fa-camera text-[10px] text-slate-400"></i>`}
+                </button>
+            </td>
+            <td class="py-2 pl-2 pr-4 text-right whitespace-nowrap">
+                <div class="inline-flex items-center gap-1">
+                    <button onclick="editCatalogItem('${jsCode}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] transition"><i class="fa-solid fa-pen text-sky-400"></i></button>
+                    <button onclick="deleteCatalogItem('${jsCode}')" class="px-2 py-1 rounded bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 text-[11px] transition"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function exportCatalogToExcel() {
+    if (typeof XLSX === 'undefined') {
+        showToast(currentLang === 'en' ? 'Excel library failed to load.' : '엑셀 라이브러리를 불러오지 못했습니다.');
+        return;
+    }
+    const items = masterCatalogData.filter(it => it.type === currentCatalogTab);
+    const rows = (items.length > 0 ? items : [normalizeCatalogItem({ no: 1, code: 'SAMPLE-01', type: currentCatalogTab, active: 'YES', partNameEng: 'Sample Item' })]).map(it => ({
+        'No.': it.no,
+        'Code': it.code,
+        'Product': it.product,
+        'Type': it.type,
+        'MADE IN': it.madeIn,
+        'ACTIVE': it.active,
+        'Manufacture': it.manufacture,
+        'PART NAME(Eng)': it.partNameEng,
+        'OZTECH NAME': it.oztechName,
+        'MOLD NO.': it.moldNo,
+        'WEIGHT (KG/M2)': it.weight,
+        'Img': it.img && !it.img.startsWith('data:') ? it.img : ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+        { wch: 6 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
+        { wch: 14 }, { wch: 34 }, { wch: 22 }, { wch: 12 }, { wch: 15 }, { wch: 20 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, currentCatalogTab === 'PART' ? 'PartList' : 'ProfileList');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `master_${currentCatalogTab.toLowerCase()}_list_${today}.xlsx`);
+    showToast(currentLang === 'en' ? `Exported ${items.length} ${currentCatalogTab} rows.` : `${currentCatalogTab} 리스트 ${items.length}건을 내보냈습니다.`);
+}
+
+function triggerCatalogExcelImport() {
+    if (typeof XLSX === 'undefined') {
+        showToast(currentLang === 'en' ? 'Excel library failed to load.' : '엑셀 라이브러리를 불러오지 못했습니다.');
+        return;
+    }
+    const input = document.getElementById('cat-excel-file-input');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+function pickCatalogSheetFromWorkbook(wb, targetType) {
+    const names = wb.SheetNames || [];
+    if (names.length === 0) return null;
+    const preferred = targetType === 'PART'
+        ? names.find(n => /part/i.test(n))
+        : names.find(n => /profile/i.test(n));
+    const sheetName = preferred || names[0];
+    return wb.Sheets[sheetName];
+}
+
+function findMatchingCatalogIndexForImport(itemObj, hasExplicitCode = true) {
+    const upperCode = itemObj.code.toUpperCase();
+    const byCode = masterCatalogData.findIndex(it => it.code.toUpperCase() === upperCode);
+    if (byCode !== -1) return byCode;
+
+    if (itemObj.product && itemObj.madeIn && itemObj.no) {
+        const byIdentity = masterCatalogData.findIndex(it =>
+            it.type === itemObj.type &&
+            it.product.toUpperCase() === itemObj.product.toUpperCase() &&
+            it.madeIn.toUpperCase() === itemObj.madeIn.toUpperCase() &&
+            Number(it.no) === Number(itemObj.no)
+        );
+        if (byIdentity !== -1) return byIdentity;
+    }
+
+    if (itemObj.partNameEng && itemObj.madeIn) {
+        const bySpec = masterCatalogData.findIndex(it =>
+            it.type === itemObj.type &&
+            it.partNameEng.toUpperCase() === itemObj.partNameEng.toUpperCase() &&
+            it.madeIn.toUpperCase() === itemObj.madeIn.toUpperCase() &&
+            it.manufacture.toUpperCase() === itemObj.manufacture.toUpperCase() &&
+            it.moldNo.toUpperCase() === itemObj.moldNo.toUpperCase() &&
+            (!hasExplicitCode || Number(it.no) === Number(itemObj.no))
+        );
+        if (bySpec !== -1) return bySpec;
+    }
+    return -1;
+}
+
+function handleCatalogExcelImport(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: 'array' });
+            const sheet = pickCatalogSheetFromWorkbook(wb, currentCatalogTab);
+            if (!sheet) return;
+            const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+            let updatedCount = 0;
+            let addedCount = 0;
+
+            rawRows.forEach((row, idx) => {
+                const no = Math.max(1, parseInt(pickExcelCol(row, ['No.', 'No', 'ItemNo', '번호', '순번'], idx + 1)) || (idx + 1));
+                const product = String(pickExcelCol(row, ['Product', 'Prod', '제품', '제품군'], '')).trim().toUpperCase();
+                const typeRaw = String(pickExcelCol(row, ['Type', 'ItemType', '구분', '타입'], currentCatalogTab)).trim().toUpperCase();
+                const type = typeRaw === 'PART' ? 'PART' : (typeRaw === 'PROFILE' ? 'PROFILE' : currentCatalogTab);
+                const madeIn = String(pickExcelCol(row, ['MADE IN', 'MadeIn', 'Country', 'Origin', '생산국', '원산지'], '')).trim().toUpperCase();
+                const activeRaw = String(pickExcelCol(row, ['ACTIVE', 'Active', 'Status', '사용여부', '활성'], 'YES')).trim().toUpperCase();
+                const active = activeRaw === 'NO' || activeRaw === 'N' || activeRaw === 'FALSE' ? 'NO' : 'YES';
+                const rawCode = String(pickExcelCol(row, ['Code', 'ItemCode', 'ProfileCode', 'PartCode', '코드', '품목코드'], '')).trim();
+                const code = rawCode || generateCatalogCode({ product, type, madeIn, active, no });
+                if (!code) return;
+
+                const manufacture = String(pickExcelCol(row, ['Manufacture', 'Manufacturer', 'Maker', 'Vendor', '제조사', '생산업체'], '')).trim();
+                const partNameEng = String(pickExcelCol(row, ['PART NAME(Eng)', 'PartNameEng', 'PartName', 'ProfileName', 'Name', '영문명', '품목명'], '')).trim();
+                const oztechName = String(pickExcelCol(row, ['OZTECH NAME', 'OztechName', 'KoreanName', '한글명', '오즈텍명'], '')).trim();
+                const moldNo = String(pickExcelCol(row, ['MOLD NO.', 'MoldNo', 'Mold', '금형번호', '몰드번호'], '')).trim();
+                const weight = String(pickExcelCol(row, ['WEIGHT (KG/M2)', 'WEIGHT(KG/M2)', 'WEIGHT', 'Weight', '무게', '중량'], '')).trim();
+                const img = String(pickExcelCol(row, ['Img', 'Image', 'Photo', '사진', '이미지'], '')).trim();
+
+                const itemObj = normalizeCatalogItem({
+                    no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, moldNo, weight, img
+                });
+
+                const existingIdx = findMatchingCatalogIndexForImport(itemObj, Boolean(rawCode));
+                if (existingIdx !== -1) {
+                    const prevCode = masterCatalogData[existingIdx].code;
+                    if (!itemObj.img && masterCatalogData[existingIdx].img) {
+                        itemObj.img = masterCatalogData[existingIdx].img;
+                    }
+                    masterCatalogData[existingIdx] = itemObj;
+                    syncCatalogChangesToRacks(prevCode, itemObj);
+                    updatedCount++;
+                } else {
+                    masterCatalogData.push(itemObj);
+                    addedCount++;
+                }
+            });
+
+            if (updatedCount + addedCount === 0) {
+                showToast(currentLang === 'en' ? 'No valid rows with Code found in Excel.' : '엑셀에서 유효한 Code 행을 찾지 못했습니다.');
+                return;
+            }
+
+            saveMasterCatalog(true);
+            if (isSupabaseConfigured() && getSupabaseConfig().autoSync) {
+                if (cloudPushTimer) {
+                    clearTimeout(cloudPushTimer);
+                    cloudPushTimer = null;
+                }
+                pushDataToSupabase({ silent: true });
+            }
+            resetCatalogForm();
+            renderCatalogTable();
+            showToast(currentLang === 'en'
+                ? `Excel import complete: ${updatedCount} overwritten, ${addedCount} added.`
+                : `엑셀 반영 완료: 기존 ${updatedCount}건 덮어쓰기, 신규 ${addedCount}건 추가`);
+        } catch (err) {
+            console.error('Catalog Excel import error:', err);
+            showToast(currentLang === 'en' ? 'Failed to import Excel file.' : '엑셀 파일을 읽는 중 오류가 발생했습니다.');
+        }
+    };
+    reader.readAsArrayBuffer(file);
 }
 
 // 모달 입력창에서 Enter 키로 Save/확인 실행 (한글 IME 조합 중 및 버튼/텍스트영역 포커스 제외)
