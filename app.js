@@ -354,10 +354,10 @@ const DEFAULT_FACTORY_BLOCKS_DATA = [
     }
 ];
 const DEFAULT_MASTER_CATALOG_DATA = [
-    { no: 1, code: "FA-PMA-A1", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FRONT POLE BAR FOR BASIC, TITAN", oztechName: "타이탄 프론트바", moldNo: "", weight: "", img: "" },
-    { no: 2, code: "FA-PMA-A2", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA HOOD", oztechName: "폴딩암 후드", moldNo: "", weight: "", img: "" },
-    { no: 3, code: "FA-PMA-A3", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA TRAY", oztechName: "폴딩암 트레이", moldNo: "", weight: "", img: "" },
-    { no: 4, code: "FA-PKO-A4", product: "FAA", type: "PROFILE", madeIn: "KOREA", active: "YES", manufacture: "한성알미늄", partNameEng: "FRONT POLE BAR FOR BASIC TITAN", oztechName: "타이탄 프론트바", moldNo: "HY-807", weight: "1.750", img: "" }
+    { no: 1, code: "FA-PMA-A1", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FRONT POLE BAR FOR BASIC, TITAN", oztechName: "타이탄 프론트바", colour: "", length: "", moldNo: "", weight: "", img: "" },
+    { no: 2, code: "FA-PMA-A2", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA HOOD", oztechName: "폴딩암 후드", colour: "", length: "", moldNo: "", weight: "", img: "" },
+    { no: 3, code: "FA-PMA-A3", product: "FAA", type: "PROFILE", madeIn: "MALAYSIA", active: "YES", manufacture: "LB", partNameEng: "FAA TRAY", oztechName: "폴딩암 트레이", colour: "", length: "", moldNo: "", weight: "", img: "" },
+    { no: 4, code: "FA-PKO-A4", product: "FAA", type: "PROFILE", madeIn: "KOREA", active: "YES", manufacture: "한성알미늄", partNameEng: "FRONT POLE BAR FOR BASIC TITAN", oztechName: "타이탄 프론트바", colour: "", length: "", moldNo: "HY-807", weight: "1.750", img: "" }
 ];
 /* __BAKED_DATA_END__ */
 
@@ -368,10 +368,18 @@ function extractCatalogWeightNumber(raw) {
     return match ? match[1] : '';
 }
 
+function extractCatalogLengthNumber(raw) {
+    const cleaned = String(raw ?? '').replace(/,/g, '').trim();
+    const match = cleaned.match(/(\d+)/);
+    return match ? match[1] : '';
+}
+
 function normalizeCatalogItem(raw, fallbackNo = 1) {
     const code = String((raw && raw.code) || '').trim();
     const rawType = String((raw && (raw.type || raw.item_type)) || 'PROFILE').trim().toUpperCase();
     const rawActive = String((raw && raw.active) || 'YES').trim().toUpperCase();
+    const rawColour = String((raw && (raw.colour ?? raw.color)) || '').trim();
+    const rawLength = extractCatalogLengthNumber(raw && (raw.length ?? raw.length_m ?? raw.lengthMm));
     return {
         no: Math.max(1, parseInt(raw && (raw.no ?? raw.item_no)) || fallbackNo),
         code,
@@ -382,6 +390,8 @@ function normalizeCatalogItem(raw, fallbackNo = 1) {
         manufacture: String((raw && raw.manufacture) || '').trim(),
         partNameEng: String((raw && (raw.partNameEng ?? raw.part_name_eng)) || '').trim(),
         oztechName: String((raw && (raw.oztechName ?? raw.oztech_name)) || '').trim(),
+        colour: rawColour,
+        length: rawLength,
         moldNo: String((raw && (raw.moldNo ?? raw.mold_no)) || '').trim(),
         weight: extractCatalogWeightNumber(raw && raw.weight),
         img: String((raw && raw.img) || '').trim()
@@ -2304,7 +2314,7 @@ function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
         const typeCls = catItem.type === 'PART'
             ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
             : 'bg-sky-500/20 text-sky-300 border-sky-500/40';
-        const metaParts = [catItem.product, catItem.madeIn, catItem.manufacture, catItem.moldNo].filter(Boolean);
+        const metaParts = [catItem.product, catItem.madeIn, catItem.manufacture, catItem.colour, catItem.length ? `${catItem.length}mm` : '', catItem.moldNo].filter(Boolean);
         box.innerHTML = `
             ${catItem.img
                 ? `<img src="${escapeHtml(catItem.img)}" alt="" class="w-9 h-9 rounded-lg object-cover border border-slate-700 bg-white shrink-0">`
@@ -2334,6 +2344,13 @@ function setProfileCatalogSelection(catItem) {
     document.getElementById('profile-form-selected-code').value = catItem.code;
     document.getElementById('profile-form-code').value = catItem.code;
     document.getElementById('profile-form-name').value = catItem.partNameEng || catItem.oztechName || catItem.code;
+    const lenNum = extractLengthNumber(catItem.length);
+    if (lenNum) {
+        document.getElementById('profile-form-length').value = lenNum;
+    }
+    if (catItem.colour) {
+        document.getElementById('profile-form-color').value = catItem.colour;
+    }
     renderProfileSelectedPreview(catItem);
     hideProfileCatalogDropdown();
 }
@@ -2346,6 +2363,8 @@ function getFilteredActiveCatalogForPicker(queryRaw) {
         it.code.toUpperCase().includes(q) ||
         it.partNameEng.toUpperCase().includes(q) ||
         it.oztechName.toUpperCase().includes(q) ||
+        it.colour.toUpperCase().includes(q) ||
+        it.length.toUpperCase().includes(q) ||
         it.product.toUpperCase().includes(q) ||
         it.manufacture.toUpperCase().includes(q) ||
         it.moldNo.toUpperCase().includes(q)
@@ -2378,7 +2397,7 @@ function renderProfileCatalogDropdown() {
         row.type = 'button';
         const isHl = idx === profileCatalogHighlightIdx;
         row.className = `w-full text-left px-3 py-2 flex items-center gap-2.5 transition ${isHl ? 'bg-sky-500/20' : 'hover:bg-slate-800/90'}`;
-        const subMeta = [it.oztechName, it.product, it.madeIn, it.manufacture, it.moldNo].filter(Boolean).join(' · ');
+        const subMeta = [it.length ? `${it.length}mm` : '', it.colour, it.oztechName, it.product, it.madeIn, it.manufacture, it.moldNo].filter(Boolean).join(' · ');
         const typeCls = it.type === 'PART'
             ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
             : 'bg-sky-500/15 text-sky-300 border-sky-500/40';
@@ -4728,26 +4747,39 @@ function assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows) {
 function isMissingCatalogTableError(err) {
     const msg = String((err && err.message) || '').toLowerCase();
     const code = String((err && err.code) || '');
-    return code === '42P01' || code === 'PGRST205' || msg.includes('catalog_items');
+    return code === '42P01' || code === 'PGRST205' || (msg.includes('catalog_items') && !msg.includes('colour') && !msg.includes('length'));
 }
 
-function buildCatalogRowsForSupabase(items) {
+function isMissingCatalogVariantColumnError(err) {
+    const msg = String((err && err.message) || '').toLowerCase();
+    const code = String((err && err.code) || '');
+    return code === 'PGRST204' || code === '42703' || msg.includes('colour') || msg.includes('length');
+}
+
+function buildCatalogRowsForSupabase(items, includeVariantCols = true) {
     const now = new Date().toISOString();
-    return (items || []).map(it => ({
-        code: String(it.code),
-        item_no: Math.max(1, parseInt(it.no) || 1),
-        product: String(it.product || ''),
-        item_type: it.type === 'PART' ? 'PART' : 'PROFILE',
-        made_in: String(it.madeIn || ''),
-        active: it.active === 'NO' ? 'NO' : 'YES',
-        manufacture: String(it.manufacture || ''),
-        part_name_eng: String(it.partNameEng || ''),
-        oztech_name: String(it.oztechName || ''),
-        mold_no: String(it.moldNo || ''),
-        weight: String(it.weight || ''),
-        img: String(it.img || ''),
-        updated_at: now
-    }));
+    return (items || []).map(it => {
+        const row = {
+            code: String(it.code),
+            item_no: Math.max(1, parseInt(it.no) || 1),
+            product: String(it.product || ''),
+            item_type: it.type === 'PART' ? 'PART' : 'PROFILE',
+            made_in: String(it.madeIn || ''),
+            active: it.active === 'NO' ? 'NO' : 'YES',
+            manufacture: String(it.manufacture || ''),
+            part_name_eng: String(it.partNameEng || ''),
+            oztech_name: String(it.oztechName || ''),
+            mold_no: String(it.moldNo || ''),
+            weight: String(it.weight || ''),
+            img: String(it.img || ''),
+            updated_at: now
+        };
+        if (includeVariantCols) {
+            row.colour = String(it.colour || '');
+            row.length = String(it.length || '');
+        }
+        return row;
+    });
 }
 
 function applyRemoteCatalogFromCloud(catalogRows) {
@@ -5030,16 +5062,30 @@ async function pushDataToSupabase({ silent = false } = {}) {
             if (delRackErr) throw delRackErr;
         }
 
-        // 마스터 물품 리스트(catalog_items) 동기화 (테이블 미생성 시 기존 재고 동기화 방해 없이 건너뜀)
-        const catalogRows = buildCatalogRowsForSupabase(masterCatalogData);
+        // 마스터 물품 리스트(catalog_items) 동기화 (테이블/신규 컬럼 미생성 시 기존 재고 동기화 방해 없이 처리)
+        const catalogRows = buildCatalogRowsForSupabase(masterCatalogData, true);
         let catalogTableAvailable = true;
         if (catalogRows.length > 0) {
             const { error: catUpsertErr } = await supabaseClient
                 .from('catalog_items')
                 .upsert(catalogRows, { onConflict: 'code' });
             if (catUpsertErr) {
-                if (isMissingCatalogTableError(catUpsertErr)) catalogTableAvailable = false;
-                else throw catUpsertErr;
+                if (isMissingCatalogTableError(catUpsertErr)) {
+                    catalogTableAvailable = false;
+                } else if (isMissingCatalogVariantColumnError(catUpsertErr)) {
+                    const legacyCatRows = buildCatalogRowsForSupabase(masterCatalogData, false);
+                    const { error: legacyErr } = await supabaseClient
+                        .from('catalog_items')
+                        .upsert(legacyCatRows, { onConflict: 'code' });
+                    if (legacyErr) throw legacyErr;
+                    if (!silent) {
+                        showToast(currentLang === 'en'
+                            ? 'Supabase catalog_items needs colour/length columns. Run DB Setup -> Copy SQL in Supabase.'
+                            : 'Supabase catalog_items에 colour/length 컬럼 추가가 필요합니다. DB Setup -> Copy SQL을 실행해주세요.');
+                    }
+                } else {
+                    throw catUpsertErr;
+                }
             }
         }
         if (catalogTableAvailable) {
@@ -5237,11 +5283,16 @@ function copySupabaseSql() {
         `  manufacture text not null default '',`,
         `  part_name_eng text not null default '',`,
         `  oztech_name text not null default '',`,
+        `  colour text not null default '',`,
+        `  length text not null default '',`,
         `  mold_no text not null default '',`,
         `  weight text not null default '',`,
         `  img text not null default '',`,
         `  updated_at timestamptz not null default now()`,
         `);`,
+        ``,
+        `alter table public.catalog_items add column if not exists colour text not null default '';`,
+        `alter table public.catalog_items add column if not exists length text not null default '';`,
         ``,
         `alter table public.racks enable row level security;`,
         `alter table public.profiles enable row level security;`,
@@ -5384,7 +5435,32 @@ function normalizeCountryPrefix2(madeInRaw) {
     return trimmed.replace(/[^A-Z0-9]/g, '').slice(0, 2);
 }
 
-function generateCatalogCode({ product, type, madeIn, active, no }) {
+function normalizeColourPrefix2(colour) {
+    const trimmed = String(colour || '').trim().toUpperCase();
+    if (!trimmed) return '';
+    const koMap = {
+        '블랙': 'BL', '검정': 'BL',
+        '화이트': 'WH', '백색': 'WH', '흰색': 'WH',
+        '차콜': 'CH',
+        '우드': 'WO', '우드랜드': 'WO',
+        '실버': 'SL', '은색': 'SL',
+        '밀피니시': 'MF', '무도장': 'MF',
+        '브론즈': 'BR',
+        '그레이': 'GR', '회색': 'GR'
+    };
+    for (const [k, v] of Object.entries(koMap)) {
+        if (trimmed.includes(k)) return v;
+    }
+    return trimmed.replace(/[^A-Z0-9]/g, '').slice(0, 2);
+}
+
+function normalizeLengthPrefix3(length) {
+    const digits = String(length ?? '').replace(/[^0-9]/g, '');
+    if (!digits) return '';
+    return digits.length >= 3 ? digits.slice(0, 3) : digits.padStart(3, '0');
+}
+
+function generateCatalogCode({ product, type, madeIn, active, no, length, colour }) {
     const prod2 = String(product || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2);
     const type1 = String(type || 'PROFILE').trim().toUpperCase().charAt(0) || 'P';
     const country2 = normalizeCountryPrefix2(madeIn);
@@ -5392,7 +5468,11 @@ function generateCatalogCode({ product, type, madeIn, active, no }) {
     const noNum = parseInt(no);
     const noStr = (!isNaN(noNum) && noNum > 0) ? String(noNum) : '';
     if (!prod2 || prod2.length < 2 || !country2 || country2.length < 2 || !noStr) return '';
-    return `${prod2}-${type1}${country2}-${active1}${noStr}`;
+    const baseCode = `${prod2}-${type1}${country2}-${active1}${noStr}`;
+    const len3 = normalizeLengthPrefix3(length);
+    const col2 = normalizeColourPrefix2(colour);
+    const variantSuffix = `${len3}${col2}`;
+    return variantSuffix ? `${baseCode}-${variantSuffix}` : baseCode;
 }
 
 function updateCatalogAutoCodePreview() {
@@ -5403,7 +5483,9 @@ function updateCatalogAutoCodePreview() {
         type: document.getElementById('cat-form-type')?.value,
         madeIn: document.getElementById('cat-form-madein')?.value,
         active: document.getElementById('cat-form-active')?.value,
-        no: document.getElementById('cat-form-no')?.value
+        no: document.getElementById('cat-form-no')?.value,
+        length: document.getElementById('cat-form-length')?.value,
+        colour: document.getElementById('cat-form-colour')?.value
     });
     codeInput.value = generated;
 }
@@ -5472,8 +5554,10 @@ function switchCatalogTab(tabType) {
     }
     const prodFilter = document.getElementById('cat-filter-product');
     const madeInFilter = document.getElementById('cat-filter-madein');
+    const colourFilter = document.getElementById('cat-filter-colour');
     if (prodFilter) prodFilter.value = 'ALL';
     if (madeInFilter) madeInFilter.value = 'ALL';
+    if (colourFilter) colourFilter.value = 'ALL';
 
     resetCatalogForm();
     closeCatalogFormPanel();
@@ -5510,6 +5594,8 @@ function resetCatalogForm() {
     document.getElementById('cat-form-mfg').value = '';
     document.getElementById('cat-form-eng').value = '';
     document.getElementById('cat-form-oz').value = '';
+    document.getElementById('cat-form-colour').value = '';
+    document.getElementById('cat-form-length').value = '';
     document.getElementById('cat-form-mold').value = '';
     document.getElementById('cat-form-weight').value = '';
     document.getElementById('cat-form-img').value = '';
@@ -5539,6 +5625,8 @@ function editCatalogItem(code) {
     document.getElementById('cat-form-mfg').value = item.manufacture || '';
     document.getElementById('cat-form-eng').value = item.partNameEng || '';
     document.getElementById('cat-form-oz').value = item.oztechName || '';
+    document.getElementById('cat-form-colour').value = item.colour || '';
+    document.getElementById('cat-form-length').value = item.length || '';
     document.getElementById('cat-form-mold').value = item.moldNo || '';
     document.getElementById('cat-form-weight').value = item.weight || '';
     document.getElementById('cat-form-img').value = item.img || '';
@@ -5569,6 +5657,8 @@ function syncCatalogChangesToRacks(oldCode, item) {
                 p.name = item.partNameEng || item.oztechName || item.code;
                 p.oztechName = item.oztechName || '';
                 p.itemType = item.type;
+                if (item.length) p.length = formatLengthMmValue(item.length);
+                if (item.colour) p.color = item.colour;
                 anyUpdated = true;
             }
         });
@@ -5590,11 +5680,13 @@ function saveCatalogItemForm() {
     const manufacture = document.getElementById('cat-form-mfg').value.trim();
     const partNameEng = document.getElementById('cat-form-eng').value.trim();
     const oztechName = document.getElementById('cat-form-oz').value.trim();
+    const colour = (document.getElementById('cat-form-colour')?.value || '').trim();
+    const length = extractCatalogLengthNumber(document.getElementById('cat-form-length')?.value);
     const moldNo = document.getElementById('cat-form-mold').value.trim();
     const weight = document.getElementById('cat-form-weight').value.trim();
     const img = document.getElementById('cat-form-img').value.trim();
 
-    const code = generateCatalogCode({ product, type, madeIn, active, no });
+    const code = generateCatalogCode({ product, type, madeIn, active, no, length, colour });
     if (!code) {
         showToast(currentLang === 'en'
             ? 'Enter Product (2+ chars), MADE IN (2+ chars), and No. to auto-generate Code.'
@@ -5621,7 +5713,7 @@ function saveCatalogItemForm() {
     }
 
     const itemObj = normalizeCatalogItem({
-        no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, moldNo, weight, img
+        no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, colour, length, moldNo, weight, img
     });
 
     if (editingCatalogCode) {
@@ -5731,13 +5823,13 @@ function setCatalogSort(key) {
         catalogSortDir = catalogSortDir === 'asc' ? 'desc' : 'asc';
     } else {
         catalogSortKey = key;
-        catalogSortDir = (key === 'weight') ? 'desc' : 'asc';
+        catalogSortDir = (key === 'weight' || key === 'length') ? 'desc' : 'asc';
     }
     renderCatalogTable();
 }
 
 function updateCatalogSortIndicators() {
-    const keys = ['no', 'code', 'product', 'type', 'madeIn', 'active', 'manufacture', 'partNameEng', 'oztechName', 'moldNo', 'weight'];
+    const keys = ['no', 'code', 'product', 'type', 'madeIn', 'active', 'manufacture', 'partNameEng', 'oztechName', 'colour', 'length', 'moldNo', 'weight'];
     keys.forEach(k => {
         const el = document.getElementById(`cat-sort-ind-${k}`);
         if (!el) return;
@@ -5749,6 +5841,7 @@ function populateCatalogFilterOptions() {
     const tabItems = masterCatalogData.filter(it => it.type === currentCatalogTab);
     const prodSelect = document.getElementById('cat-filter-product');
     const madeInSelect = document.getElementById('cat-filter-madein');
+    const colourSelect = document.getElementById('cat-filter-colour');
 
     if (prodSelect) {
         const prev = prodSelect.value || 'ALL';
@@ -5764,6 +5857,13 @@ function populateCatalogFilterOptions() {
             countries.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
         madeInSelect.value = (prev !== 'ALL' && countries.includes(prev)) ? prev : 'ALL';
     }
+    if (colourSelect) {
+        const prev = colourSelect.value || 'ALL';
+        const colours = Array.from(new Set(tabItems.map(it => it.colour).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        colourSelect.innerHTML = `<option value="ALL">Colour: ALL</option>` +
+            colours.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        colourSelect.value = (prev !== 'ALL' && colours.includes(prev)) ? prev : 'ALL';
+    }
 }
 
 function renderCatalogTable() {
@@ -5777,12 +5877,14 @@ function renderCatalogTable() {
     const activeFilter = document.getElementById('cat-filter-active')?.value || 'ALL';
     const prodFilter = document.getElementById('cat-filter-product')?.value || 'ALL';
     const madeInFilter = document.getElementById('cat-filter-madein')?.value || 'ALL';
+    const colourFilter = document.getElementById('cat-filter-colour')?.value || 'ALL';
 
     const rows = masterCatalogData.filter(it => {
         if (it.type !== currentCatalogTab) return false;
         if (activeFilter !== 'ALL' && it.active !== activeFilter) return false;
         if (prodFilter !== 'ALL' && it.product !== prodFilter) return false;
         if (madeInFilter !== 'ALL' && it.madeIn !== madeInFilter) return false;
+        if (colourFilter !== 'ALL' && it.colour !== colourFilter) return false;
         if (query) {
             return (
                 it.code.toUpperCase().includes(query) ||
@@ -5791,6 +5893,8 @@ function renderCatalogTable() {
                 it.manufacture.toUpperCase().includes(query) ||
                 it.partNameEng.toUpperCase().includes(query) ||
                 it.oztechName.toUpperCase().includes(query) ||
+                it.colour.toUpperCase().includes(query) ||
+                it.length.toUpperCase().includes(query) ||
                 it.moldNo.toUpperCase().includes(query)
             );
         }
@@ -5805,6 +5909,9 @@ function renderCatalogTable() {
         if (catalogSortKey === 'weight') {
             return ((parseFloat(a.weight) || 0) - (parseFloat(b.weight) || 0)) * dir;
         }
+        if (catalogSortKey === 'length') {
+            return ((parseFloat(a.length) || 0) - (parseFloat(b.length) || 0)) * dir;
+        }
         const cmp = String(a[catalogSortKey] || '').localeCompare(String(b[catalogSortKey] || ''), 'ko', { numeric: true, sensitivity: 'base' });
         if (cmp !== 0) return cmp * dir;
         return (Number(a.no) || 0) - (Number(b.no) || 0);
@@ -5814,7 +5921,7 @@ function renderCatalogTable() {
     if (rows.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="13" class="py-12 text-center text-slate-400">
+                <td colspan="15" class="py-12 text-center text-slate-400">
                     ${currentLang === 'en' ? `No items in ${currentCatalogTab} List matching your filter.` : `${currentCatalogTab} 리스트에 해당하는 항목이 없습니다.`}
                 </td>
             </tr>
@@ -5845,6 +5952,8 @@ function renderCatalogTable() {
             <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.manufacture || '-')}</td>
             <td class="py-2 px-2 text-slate-100 font-semibold">${escapeHtml(it.partNameEng)}</td>
             <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.oztechName || '-')}</td>
+            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.colour || '-')}</td>
+            <td class="py-2 px-2 font-mono text-emerald-300 text-right whitespace-nowrap">${escapeHtml(it.length || '-')}</td>
             <td class="py-2 px-2 font-mono text-slate-300 whitespace-nowrap">${escapeHtml(it.moldNo || '-')}</td>
             <td class="py-2 px-2 font-mono text-amber-200 text-right whitespace-nowrap">${escapeHtml(it.weight || '-')}</td>
             <td class="py-2 px-2 text-center whitespace-nowrap">
@@ -5869,7 +5978,7 @@ function exportCatalogToExcel() {
         return;
     }
     const items = masterCatalogData.filter(it => it.type === currentCatalogTab);
-    const rows = (items.length > 0 ? items : [normalizeCatalogItem({ no: 1, code: 'SAMPLE-01', type: currentCatalogTab, active: 'YES', partNameEng: 'Sample Item' })]).map(it => ({
+    const rows = (items.length > 0 ? items : [normalizeCatalogItem({ no: 1, code: 'FA-PMA-A1-110MF', product: 'FAA', madeIn: 'MALAYSIA', type: currentCatalogTab, active: 'YES', partNameEng: 'Sample Item', colour: 'MF', length: '11000' })]).map(it => ({
         'No.': it.no,
         'Code': it.code,
         'Product': it.product,
@@ -5879,6 +5988,8 @@ function exportCatalogToExcel() {
         'Manufacture': it.manufacture,
         'PART NAME(Eng)': it.partNameEng,
         'OZTECH NAME': it.oztechName,
+        'Colour': it.colour,
+        'length(M)': it.length,
         'MOLD NO.': it.moldNo,
         'WEIGHT (KG/M2)': it.weight,
         'Img': it.img && !it.img.startsWith('data:') ? it.img : ''
@@ -5886,8 +5997,8 @@ function exportCatalogToExcel() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-        { wch: 6 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
-        { wch: 14 }, { wch: 34 }, { wch: 22 }, { wch: 12 }, { wch: 15 }, { wch: 20 }
+        { wch: 6 }, { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 8 },
+        { wch: 14 }, { wch: 34 }, { wch: 22 }, { wch: 16 }, { wch: 11 }, { wch: 12 }, { wch: 15 }, { wch: 20 }
     ];
     XLSX.utils.book_append_sheet(wb, ws, currentCatalogTab === 'PART' ? 'PartList' : 'ProfileList');
     const today = new Date().toISOString().slice(0, 10);
@@ -5927,7 +6038,9 @@ function findMatchingCatalogIndexForImport(itemObj, hasExplicitCode = true) {
             it.type === itemObj.type &&
             it.product.toUpperCase() === itemObj.product.toUpperCase() &&
             it.madeIn.toUpperCase() === itemObj.madeIn.toUpperCase() &&
-            Number(it.no) === Number(itemObj.no)
+            Number(it.no) === Number(itemObj.no) &&
+            it.colour.toUpperCase() === itemObj.colour.toUpperCase() &&
+            it.length.toUpperCase() === itemObj.length.toUpperCase()
         );
         if (byIdentity !== -1) return byIdentity;
     }
@@ -5938,6 +6051,8 @@ function findMatchingCatalogIndexForImport(itemObj, hasExplicitCode = true) {
             it.partNameEng.toUpperCase() === itemObj.partNameEng.toUpperCase() &&
             it.madeIn.toUpperCase() === itemObj.madeIn.toUpperCase() &&
             it.manufacture.toUpperCase() === itemObj.manufacture.toUpperCase() &&
+            it.colour.toUpperCase() === itemObj.colour.toUpperCase() &&
+            it.length.toUpperCase() === itemObj.length.toUpperCase() &&
             it.moldNo.toUpperCase() === itemObj.moldNo.toUpperCase() &&
             (!hasExplicitCode || Number(it.no) === Number(itemObj.no))
         );
@@ -5968,8 +6083,10 @@ function handleCatalogExcelImport(event) {
                 const madeIn = String(pickExcelCol(row, ['MADE IN', 'MadeIn', 'Country', 'Origin', '생산국', '원산지'], '')).trim().toUpperCase();
                 const activeRaw = String(pickExcelCol(row, ['ACTIVE', 'Active', 'Status', '사용여부', '활성'], 'YES')).trim().toUpperCase();
                 const active = activeRaw === 'NO' || activeRaw === 'N' || activeRaw === 'FALSE' ? 'NO' : 'YES';
+                const colour = String(pickExcelCol(row, ['Colour', 'Color', '색상', '컬러'], '')).trim();
+                const length = extractCatalogLengthNumber(pickExcelCol(row, ['length(M)', 'Length(M)', 'Length(mm)', 'Length', '길이'], ''));
                 const rawCode = String(pickExcelCol(row, ['Code', 'ItemCode', 'ProfileCode', 'PartCode', '코드', '품목코드'], '')).trim();
-                const code = rawCode || generateCatalogCode({ product, type, madeIn, active, no });
+                const code = rawCode || generateCatalogCode({ product, type, madeIn, active, no, length, colour });
                 if (!code) return;
 
                 const manufacture = String(pickExcelCol(row, ['Manufacture', 'Manufacturer', 'Maker', 'Vendor', '제조사', '생산업체'], '')).trim();
@@ -5980,7 +6097,7 @@ function handleCatalogExcelImport(event) {
                 const img = String(pickExcelCol(row, ['Img', 'Image', 'Photo', '사진', '이미지'], '')).trim();
 
                 const itemObj = normalizeCatalogItem({
-                    no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, moldNo, weight, img
+                    no, code, product, type, madeIn, active, manufacture, partNameEng, oztechName, colour, length, moldNo, weight, img
                 });
 
                 const existingIdx = findMatchingCatalogIndexForImport(itemObj, Boolean(rawCode));

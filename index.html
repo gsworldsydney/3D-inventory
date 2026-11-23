@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
@@ -858,13 +858,16 @@
                 <div class="flex items-center flex-wrap gap-2">
                     <div class="relative">
                         <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" id="cat-search-input" oninput="renderCatalogTable()" placeholder="Search Code, Product, Name, Mold..." class="bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-48 sm:w-56">
+                        <input type="text" id="cat-search-input" oninput="renderCatalogTable()" placeholder="Search Code, Product, Name, Colour, Length..." class="bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400 w-48 sm:w-56">
                     </div>
                     <select id="cat-filter-product" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                         <option value="ALL">Product: ALL</option>
                     </select>
                     <select id="cat-filter-madein" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                         <option value="ALL">MADE IN: ALL</option>
+                    </select>
+                    <select id="cat-filter-colour" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+                        <option value="ALL">Colour: ALL</option>
                     </select>
                     <select id="cat-filter-active" onchange="renderCatalogTable()" class="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                         <option value="ALL">ACTIVE: ALL</option>
@@ -897,14 +900,14 @@
                         <button type="button" onclick="closeCatalogFormPanel()" class="text-slate-400 hover:text-white text-sm" title="Close Form"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2 items-end">
+                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 items-end">
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">No. *</label>
                         <input type="number" id="cat-form-no" min="1" placeholder="1" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">Code (Auto)</label>
-                        <input type="text" id="cat-form-code" readonly placeholder="FA-PKO-A1" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
+                        <input type="text" id="cat-form-code" readonly placeholder="FA-PMA-A1-110MF" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">Product *</label>
@@ -919,7 +922,7 @@
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">MADE IN *</label>
-                        <input type="text" id="cat-form-madein" placeholder="KOREA" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white uppercase focus:border-sky-400 focus:outline-none">
+                        <input type="text" id="cat-form-madein" placeholder="MALAYSIA" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white uppercase focus:border-sky-400 focus:outline-none">
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">ACTIVE</label>
@@ -934,11 +937,19 @@
                     </div>
                     <div class="sm:col-span-2 lg:col-span-2">
                         <label class="text-[10px] text-slate-400 block mb-0.5">PART NAME(Eng) *</label>
-                        <input type="text" id="cat-form-eng" placeholder="FRONT POLE BAR FOR BASIC" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                        <input type="text" id="cat-form-eng" placeholder="FRONT POLE BAR FOR BASIC, TITAN" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
                     </div>
                     <div class="sm:col-span-2 lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">OZTECH NAME</label>
                         <input type="text" id="cat-form-oz" placeholder="타이탄 프론트바" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Colour</label>
+                        <input type="text" id="cat-form-colour" placeholder="WHITE / MF" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white uppercase focus:border-sky-400 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Length (mm)</label>
+                        <input type="number" id="cat-form-length" min="0" step="1" inputmode="numeric" placeholder="4700" oninput="updateCatalogAutoCodePreview()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono focus:border-sky-400 focus:outline-none">
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">MOLD NO.</label>
@@ -982,6 +993,8 @@
                             <th onclick="setCatalogSort('manufacture')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Manufacture <span id="cat-sort-ind-manufacture" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('partNameEng')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[200px] cursor-pointer hover:text-white">PART NAME(Eng) <span id="cat-sort-ind-partNameEng" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('oztechName')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[140px] cursor-pointer hover:text-white">OZTECH NAME <span id="cat-sort-ind-oztechName" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('colour')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Colour <span id="cat-sort-ind-colour" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('length')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">length(M) <span id="cat-sort-ind-length" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('moldNo')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">MOLD NO. <span id="cat-sort-ind-moldNo" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('weight')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">WEIGHT (KG/M2) <span id="cat-sort-ind-weight" class="text-sky-400 ml-0.5"></span></th>
                             <th class="py-2 px-2 font-semibold whitespace-nowrap text-center">Img</th>
@@ -1006,6 +1019,6 @@
         <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=21"></script>
 </body>
 </html>
