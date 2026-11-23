@@ -1186,6 +1186,9 @@ function init3D() {
     window.addEventListener('resize', onWindowResize);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('dragover', onCanvasDragOver);
+    container.addEventListener('dragleave', onCanvasDragLeave);
+    container.addEventListener('drop', onCanvasDrop);
 
     // 초기 진입 시 첫 번째 구역(또는 C-1F-A1) 하이라이트
     setTimeout(() => {
@@ -1478,6 +1481,134 @@ function onPointerMove(event) {
 }
 
 let pointerDownPos = { x: 0, y: 0 };
+let draggedProfileTransfer = null; // { blockId, profileIdx }
+let dragDropHoverTarget = null;    // { blockId, tier }
+
+function findRackHitFromClientPos(clientX, clientY) {
+    if (!renderer || !camera || !raycaster) return null;
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return null;
+    }
+    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const visibleMeshes = interactiveMeshes.filter(m => m.parent && m.parent.parent && m.parent.parent.visible);
+    const intersects = raycaster.intersectObjects(visibleMeshes);
+    return intersects.length > 0 ? intersects[0].object.userData : null;
+}
+
+function clearCanvasDragDropState() {
+    if (dragDropHoverTarget) {
+        dragDropHoverTarget = null;
+        applySelectionHighlight(selectedBlockId, selectedTier);
+    }
+    const tooltip = document.getElementById('hover-tooltip');
+    if (tooltip) tooltip.classList.add('hidden');
+}
+
+function applyDragDropTargetHighlight(targetBlockId, targetTier) {
+    applySelectionHighlight(selectedBlockId, selectedTier);
+    interactiveMeshes.forEach(mesh => {
+        const bData = mesh.userData.blockData;
+        if (bData.id !== targetBlockId) return;
+        const mTier = mesh.userData.tier;
+        if ((bData.tiers || 1) > 1 && targetTier && mTier !== null) {
+            if (mTier === targetTier) {
+                mesh.material.color.setHex(0x10b981);
+                mesh.material.emissive.setHex(0x10b981);
+                mesh.material.emissiveIntensity = 0.65;
+            } else {
+                mesh.material.color.setHex(0x6ee7b7);
+                mesh.material.emissive.setHex(0x10b981);
+                mesh.material.emissiveIntensity = 0.22;
+            }
+        } else {
+            mesh.material.color.setHex(0x10b981);
+            mesh.material.emissive.setHex(0x10b981);
+            mesh.material.emissiveIntensity = 0.55;
+        }
+    });
+}
+
+function onCanvasDragOver(event) {
+    if (currentPage !== 'map' || !draggedProfileTransfer) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+
+    const hit = findRackHitFromClientPos(event.clientX, event.clientY);
+    const tooltip = document.getElementById('hover-tooltip');
+    if (!hit) {
+        clearCanvasDragDropState();
+        return;
+    }
+
+    const targetData = hit.blockData;
+    const targetTier = ((targetData.tiers || 1) > 1 && hit.tier) ? hit.tier : 1;
+    if (!dragDropHoverTarget || dragDropHoverTarget.blockId !== targetData.id || dragDropHoverTarget.tier !== targetTier) {
+        dragDropHoverTarget = { blockId: targetData.id, tier: targetTier };
+        applyDragDropTargetHighlight(targetData.id, targetTier);
+    }
+
+    const srcBlock = factoryBlocksData.find(b => b.id === draggedProfileTransfer.blockId);
+    const srcItem = srcBlock && srcBlock.profiles[draggedProfileTransfer.profileIdx];
+    const srcCat = srcItem ? getCatalogItemByCode(srcItem.code) : null;
+    const srcLabel = srcItem ? ((srcCat ? formatProfileEnglishName(srcCat) : srcItem.name) || srcItem.code) : '';
+    const tierSuffix = (targetData.tiers || 1) > 1 ? ` · ${formatTier(targetTier)}` : '';
+
+    if (tooltip) {
+        document.getElementById('tooltip-title').textContent = `${currentLang === 'en' ? 'Move to' : '이동 대상'}: ${targetData.codeLabel}${tierSuffix}`;
+        document.getElementById('tooltip-desc').textContent = srcItem
+            ? `${srcLabel} (${Number(srcItem.qty || 0).toLocaleString()} EA)`
+            : targetData.name;
+        tooltip.style.left = `${event.clientX + 16}px`;
+        tooltip.style.top = `${event.clientY + 16}px`;
+        tooltip.classList.remove('hidden');
+    }
+}
+
+function onCanvasDragLeave(event) {
+    if (!draggedProfileTransfer) return;
+    const container = document.getElementById('canvas-container');
+    if (container && event.relatedTarget && container.contains(event.relatedTarget)) return;
+    clearCanvasDragDropState();
+}
+
+function onCanvasDrop(event) {
+    if (currentPage !== 'map') return;
+    let payload = draggedProfileTransfer;
+    if (!payload && event.dataTransfer) {
+        try {
+            const raw = event.dataTransfer.getData('text/plain');
+            if (raw) payload = JSON.parse(raw);
+        } catch (_) {}
+    }
+    if (!payload || !payload.blockId || payload.profileIdx === undefined) {
+        clearCanvasDragDropState();
+        return;
+    }
+
+    event.preventDefault();
+    const hit = findRackHitFromClientPos(event.clientX, event.clientY);
+    clearCanvasDragDropState();
+    draggedProfileTransfer = null;
+    if (!hit) return;
+
+    const targetData = hit.blockData;
+    const targetTier = ((targetData.tiers || 1) > 1 && hit.tier) ? hit.tier : 1;
+    const srcBlock = factoryBlocksData.find(b => b.id === payload.blockId);
+    const srcItem = srcBlock && srcBlock.profiles[payload.profileIdx];
+    if (!srcBlock || !srcItem) return;
+
+    if (srcBlock.id === targetData.id && (srcItem.tier || 1) === targetTier) {
+        showToast(currentLang === 'en'
+            ? 'Same rack and level as current location. Drop onto another rack or level.'
+            : '현재 적재된 랙/단과 동일한 위치입니다. 다른 랙이나 단에 놓아주세요.');
+        return;
+    }
+
+    openMoveProfileModal(payload.blockId, payload.profileIdx, targetData.id, targetTier);
+}
 function onPointerDown(event) {
     pointerDownPos = { x: event.clientX, y: event.clientY };
     
@@ -2114,59 +2245,77 @@ function renderSidePanel(data, activeTier = null) {
         const isSelected = selectedProfileIndex === idx;
         const layerLabel = currentLang === 'en' ? formatTier(profile.tier || 1) : (profile.layer || formatTier(profile.tier || 1));
         const lengthText = getProfileLength(profile) || '-';
-        const colorText = getProfileColor(profile) || '-';
+        const colorTextRaw = getProfileColor(profile) || '-';
+        const colorText = hasKoreanChars(colorTextRaw) ? '-' : colorTextRaw;
         const catItem = getCatalogItemByCode(profile.code);
-        const ozName = profile.oztechName || (catItem ? catItem.oztechName : '');
+        const rawEngName = catItem ? formatProfileEnglishName(catItem) : String(profile.name || '').replace(/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const displayName = rawEngName || profile.code || profile.name;
         const itemType = profile.itemType || (catItem ? catItem.type : '');
         const imgSrc = catItem && catItem.img ? catItem.img : '';
 
         const card = document.createElement('div');
-        card.className = `p-3 rounded-xl cursor-pointer transition shadow-sm border ${
+        card.draggable = true;
+        card.className = `px-2.5 py-2 rounded-lg cursor-grab active:cursor-grabbing select-none transition border ${
             isSelected
                 ? 'bg-slate-800 border-sky-400 ring-1 ring-sky-400/30'
                 : (isLow ? 'bg-slate-800/70 border-amber-500/50 hover:border-sky-400/60' : 'bg-slate-800/70 border-slate-700/80 hover:border-sky-400/60')
         }`;
         card.onclick = () => toggleProfileSelection(idx);
+        card.addEventListener('dragstart', (e) => {
+            if (e.target && e.target.closest && e.target.closest('button')) {
+                e.preventDefault();
+                return;
+            }
+            draggedProfileTransfer = { blockId: data.id, profileIdx: idx };
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', JSON.stringify(draggedProfileTransfer));
+            }
+            card.classList.add('opacity-50');
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('opacity-50');
+            clearCanvasDragDropState();
+            draggedProfileTransfer = null;
+        });
 
         card.innerHTML = `
             <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center flex-wrap gap-1.5 min-w-0">
-                    ${profile.code ? `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-700">${escapeHtml(profile.code)}</span>` : ''}
-                    ${itemType ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${itemType === 'PART' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'}">${escapeHtml(itemType)}</span>` : ''}
-                    <span class="text-[11px] font-semibold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded">${escapeHtml(layerLabel)}</span>
+                <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                    <i class="fa-solid fa-grip-vertical text-slate-500/80 text-[10px] shrink-0" title="${currentLang === 'en' ? 'Drag to another rack on 3D map' : '3D 맵의 다른 랙으로 드래그하여 이동'}"></i>
+                    ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-6 h-6 rounded object-cover border border-slate-700 bg-white shrink-0">` : ''}
+                    <span class="text-[10px] font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded shrink-0">${escapeHtml(layerLabel)}</span>
+                    ${itemType === 'PART' ? `<span class="text-[9px] font-bold px-1 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 shrink-0">PART</span>` : ''}
+                    <h3 class="font-bold text-slate-100 text-xs ${isSelected ? 'break-words' : 'truncate'}" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</h3>
                 </div>
-                <div class="text-right shrink-0">
-                    <span class="text-base font-bold ${isLow ? 'text-amber-400' : 'text-emerald-400'}">${Number(profile.qty).toLocaleString()}</span>
-                    <span class="text-[11px] text-slate-400">EA</span>
-                </div>
-            </div>
-
-            <div class="mt-1.5 flex items-center gap-2.5">
-                ${imgSrc ? `<img src="${escapeHtml(imgSrc)}" alt="" class="w-10 h-10 rounded-lg object-cover border border-slate-700 bg-white shrink-0">` : ''}
-                <div class="min-w-0">
-                    <h3 class="font-bold text-slate-100 text-sm break-words">${escapeHtml(profile.name)}</h3>
-                    ${ozName ? `<p class="text-[11px] text-slate-400 truncate">${escapeHtml(ozName)}</p>` : ''}
+                <div class="text-right shrink-0 whitespace-nowrap">
+                    <span class="text-sm font-bold ${isLow ? 'text-amber-400' : 'text-emerald-400'}">${Number(profile.qty).toLocaleString()}</span>
+                    <span class="text-[10px] text-slate-400">EA</span>
                 </div>
             </div>
 
-            <div class="mt-1.5 flex items-center justify-between gap-3 text-xs text-slate-400">
-                <span>${t('lbl_length')}: <strong class="text-slate-200 font-medium">${escapeHtml(lengthText)}</strong></span>
-                <span>${t('lbl_color')}: <strong class="text-slate-200 font-medium">${escapeHtml(colorText)}</strong></span>
+            <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                <span class="font-mono text-sky-400 truncate">${escapeHtml(profile.code || '-')}</span>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span><strong class="text-emerald-300 font-mono font-medium">${escapeHtml(lengthText)}</strong></span>
+                    <span class="text-slate-600">·</span>
+                    <span><strong class="text-amber-200 font-medium">${escapeHtml(colorText)}</strong></span>
+                </div>
             </div>
 
             ${isSelected ? `
-            <div class="mt-2.5 pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
+            <div class="mt-2 pt-1.5 border-t border-slate-700/60 flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1">
-                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, -10)" class="px-1.5 py-1 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">-10</button>
-                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, -1)" class="px-1.5 py-1 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">-1</button>
-                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, 1)" class="px-1.5 py-1 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">+1</button>
-                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, 10)" class="px-1.5 py-1 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">+10</button>
+                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, -10)" class="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">-10</button>
+                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, -1)" class="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">-1</button>
+                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, 1)" class="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">+1</button>
+                    <button onclick="event.stopPropagation(); adjustProfileQty(${idx}, 10)" class="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">+10</button>
                 </div>
                 <div class="flex items-center gap-1.5">
-                    <button onclick="event.stopPropagation(); openProfileModal('edit', ${idx})" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-medium transition flex items-center gap-1">
+                    <button onclick="event.stopPropagation(); openProfileModal('edit', ${idx})" class="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-medium transition flex items-center gap-1">
                         <i class="fa-solid fa-pen text-sky-400"></i> ${t('btn_edit')}
                     </button>
-                    <button onclick="event.stopPropagation(); deleteProfileItem(${idx})" class="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition flex items-center gap-1">
+                    <button onclick="event.stopPropagation(); deleteProfileItem(${idx})" class="px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[10px] font-medium transition flex items-center gap-1">
                         <i class="fa-solid fa-trash-can"></i> ${t('btn_delete')}
                     </button>
                 </div>
@@ -2307,6 +2456,18 @@ function setProfileModalCatalogFilter(typeMode) {
     renderProfileCatalogDropdown();
 }
 
+function hasKoreanChars(str) {
+    return /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/.test(String(str || ''));
+}
+
+function formatProfileEnglishName(catItem) {
+    if (!catItem) return '';
+    const eng = String(catItem.partNameEng || '').trim();
+    if (eng && !hasKoreanChars(eng)) return eng;
+    const stripped = eng.replace(/[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return stripped || catItem.code || '';
+}
+
 function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
     const box = document.getElementById('profile-selected-preview');
     if (!box) return;
@@ -2314,7 +2475,10 @@ function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
         const typeCls = catItem.type === 'PART'
             ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
             : 'bg-sky-500/20 text-sky-300 border-sky-500/40';
-        const metaParts = [catItem.product, catItem.madeIn, catItem.manufacture, catItem.colour, catItem.length ? `${catItem.length}mm` : '', catItem.moldNo].filter(Boolean);
+        const lenNum = extractLengthNumber(catItem.length);
+        const colourText = (catItem.colour && !hasKoreanChars(catItem.colour)) ? catItem.colour : '';
+        const metaParts = [catItem.product]
+            .filter(v => v && !hasKoreanChars(v));
         box.innerHTML = `
             ${catItem.img
                 ? `<img src="${escapeHtml(catItem.img)}" alt="" class="w-9 h-9 rounded-lg object-cover border border-slate-700 bg-white shrink-0">`
@@ -2322,7 +2486,8 @@ function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="px-1.5 py-0.2 rounded border text-[9px] font-bold ${typeCls}">${escapeHtml(catItem.type)}</span>
-                    ${catItem.oztechName ? `<span class="text-slate-200 font-semibold truncate">${escapeHtml(catItem.oztechName)}</span>` : ''}
+                    ${(lenNum || catItem.type === 'PROFILE') ? `<span class="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono text-[10px] font-semibold">${lenNum ? `${escapeHtml(lenNum)} mm` : '- mm'}</span>` : ''}
+                    ${(colourText || catItem.type === 'PROFILE') ? `<span class="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30 text-[10px] font-semibold">${escapeHtml(colourText || '-')}</span>` : ''}
                 </div>
                 ${metaParts.length > 0 ? `<div class="text-[10px] text-slate-400 truncate mt-0.5">${escapeHtml(metaParts.join(' · '))}</div>` : ''}
             </div>
@@ -2334,25 +2499,49 @@ function renderProfileSelectedPreview(catItem, fallbackLegacy = null) {
     }
 }
 
+function setProfileSpecFieldsLocked(locked) {
+    const lenEl = document.getElementById('profile-form-length');
+    const colEl = document.getElementById('profile-form-color');
+    const lockedLenCls = 'w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-3 pr-10 py-2 text-slate-300 font-mono cursor-not-allowed focus:outline-none';
+    const editableLenCls = 'w-full bg-slate-800 border border-slate-700 rounded-xl pl-3 pr-10 py-2 text-white font-mono focus:border-sky-400 focus:outline-none';
+    const lockedColCls = 'w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-3 py-2 text-slate-300 cursor-not-allowed focus:outline-none';
+    const editableColCls = 'w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none';
+    if (lenEl) {
+        lenEl.readOnly = Boolean(locked);
+        lenEl.tabIndex = locked ? -1 : 0;
+        lenEl.className = locked ? lockedLenCls : editableLenCls;
+    }
+    if (colEl) {
+        colEl.readOnly = Boolean(locked);
+        colEl.tabIndex = locked ? -1 : 0;
+        colEl.className = locked ? lockedColCls : editableColCls;
+    }
+}
+
 function setProfileCatalogSelection(catItem) {
     if (!catItem) {
         document.getElementById('profile-form-selected-code').value = '';
         document.getElementById('profile-form-code').value = '';
+        document.getElementById('profile-form-length').value = '';
+        document.getElementById('profile-form-color').value = '';
+        setProfileSpecFieldsLocked(true);
         renderProfileSelectedPreview(null);
         return;
     }
     document.getElementById('profile-form-selected-code').value = catItem.code;
     document.getElementById('profile-form-code').value = catItem.code;
-    document.getElementById('profile-form-name').value = catItem.partNameEng || catItem.oztechName || catItem.code;
-    const lenNum = extractLengthNumber(catItem.length);
-    if (lenNum) {
-        document.getElementById('profile-form-length').value = lenNum;
-    }
-    if (catItem.colour) {
-        document.getElementById('profile-form-color').value = catItem.colour;
-    }
+    document.getElementById('profile-form-name').value = formatProfileEnglishName(catItem);
+    document.getElementById('profile-form-length').value = extractLengthNumber(catItem.length) || '';
+    document.getElementById('profile-form-color').value = catItem.colour || '';
+    setProfileSpecFieldsLocked(true);
     renderProfileSelectedPreview(catItem);
     hideProfileCatalogDropdown();
+    const qtyEl = document.getElementById('profile-form-qty');
+    const modalEl = document.getElementById('profile-modal');
+    if (qtyEl && modalEl && !modalEl.classList.contains('hidden')) {
+        qtyEl.focus();
+        qtyEl.select();
+    }
 }
 
 function getFilteredActiveCatalogForPicker(queryRaw) {
@@ -2397,7 +2586,12 @@ function renderProfileCatalogDropdown() {
         row.type = 'button';
         const isHl = idx === profileCatalogHighlightIdx;
         row.className = `w-full text-left px-3 py-2 flex items-center gap-2.5 transition ${isHl ? 'bg-sky-500/20' : 'hover:bg-slate-800/90'}`;
-        const subMeta = [it.length ? `${it.length}mm` : '', it.colour, it.oztechName, it.product, it.madeIn, it.manufacture, it.moldNo].filter(Boolean).join(' · ');
+        const displayName = formatProfileEnglishName(it);
+        const lenNum = extractLengthNumber(it.length);
+        const colourText = (it.colour && !hasKoreanChars(it.colour)) ? it.colour : '';
+        const engMeta = [it.product]
+            .filter(v => v && !hasKoreanChars(v))
+            .join(' · ');
         const typeCls = it.type === 'PART'
             ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
             : 'bg-sky-500/15 text-sky-300 border-sky-500/40';
@@ -2407,13 +2601,17 @@ function renderProfileCatalogDropdown() {
                 : `<div class="w-8 h-8 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0"><i class="fa-solid ${it.type === 'PART' ? 'fa-screwdriver-wrench' : 'fa-cubes'} text-xs"></i></div>`}
             <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-slate-100 truncate">${escapeHtml(it.partNameEng || it.oztechName)}</span>
+                    <span class="font-bold text-slate-100 truncate">${escapeHtml(displayName)}</span>
                     <div class="flex items-center gap-1 shrink-0">
                         <span class="px-1.5 py-0.2 rounded border text-[9px] font-bold ${typeCls}">${escapeHtml(it.type)}</span>
                         <span class="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-700 text-sky-300 font-mono text-[10px] font-bold">${escapeHtml(it.code)}</span>
                     </div>
                 </div>
-                ${subMeta ? `<div class="text-[10px] text-slate-400 truncate mt-0.5">${escapeHtml(subMeta)}</div>` : ''}
+                <div class="flex items-center flex-wrap gap-1.5 mt-1 text-[10px]">
+                    ${(lenNum || it.type === 'PROFILE') ? `<span class="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono font-semibold">Length: ${lenNum ? `${escapeHtml(lenNum)} mm` : '-'}</span>` : ''}
+                    ${(colourText || it.type === 'PROFILE') ? `<span class="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-200 border border-amber-500/30 font-semibold">Colour: ${escapeHtml(colourText || '-')}</span>` : ''}
+                    ${engMeta ? `<span class="text-slate-400 truncate">${escapeHtml(engMeta)}</span>` : ''}
+                </div>
             </div>
         `;
         row.onclick = () => setProfileCatalogSelection(it);
@@ -2467,10 +2665,19 @@ function onProfileCatalogSearchInput() {
         if (uniqueMatch) {
             selectedCodeEl.value = uniqueMatch.code;
             document.getElementById('profile-form-code').value = uniqueMatch.code;
+            document.getElementById('profile-form-length').value = extractLengthNumber(uniqueMatch.length) || '';
+            document.getElementById('profile-form-color').value = uniqueMatch.colour || '';
+            setProfileSpecFieldsLocked(true);
             renderProfileSelectedPreview(uniqueMatch);
         } else {
             selectedCodeEl.value = '';
             document.getElementById('profile-form-code').value = '';
+            const isLegacyEdit = profileModalMode === 'edit' && profileEditOriginalKey && !getCatalogItemByCode(profileEditOriginalKey.split('::')[0]);
+            if (!isLegacyEdit) {
+                document.getElementById('profile-form-length').value = '';
+                document.getElementById('profile-form-color').value = '';
+            }
+            setProfileSpecFieldsLocked(!isLegacyEdit);
             renderProfileSelectedPreview(null);
         }
     }
@@ -2548,12 +2755,16 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
         if (catMatch) {
             document.getElementById('profile-form-selected-code').value = catMatch.code;
             document.getElementById('profile-form-code').value = catMatch.code;
-            document.getElementById('profile-form-name').value = item.name || catMatch.partNameEng;
+            document.getElementById('profile-form-name').value = formatProfileEnglishName(catMatch) || item.name;
+            document.getElementById('profile-form-length').value = extractLengthNumber(catMatch.length) || extractLengthNumber(getProfileLength(item));
+            document.getElementById('profile-form-color').value = catMatch.colour || getProfileColor(item);
+            setProfileSpecFieldsLocked(true);
             renderProfileSelectedPreview(catMatch);
         } else {
             document.getElementById('profile-form-selected-code').value = '';
             document.getElementById('profile-form-code').value = item.code || '';
             document.getElementById('profile-form-name').value = item.name || '';
+            setProfileSpecFieldsLocked(false);
             renderProfileSelectedPreview(null, item);
         }
     } else {
@@ -2569,8 +2780,8 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
         populateProfileRackAndTierSelects(data.id, defaultTier);
         document.getElementById('profile-form-layer').value = formatTier(defaultTier);
         document.getElementById('profile-form-material').value = prefillItem ? (prefillItem.material || 'A6063-T5') : 'A6063-T5';
-        document.getElementById('profile-form-length').value = prefillItem ? (extractLengthNumber(getProfileLength(prefillItem)) || '6000') : '6000';
-        document.getElementById('profile-form-color').value = prefillItem ? (getProfileColor(prefillItem) || (currentLang === 'en' ? 'Silver' : '실버')) : (currentLang === 'en' ? 'Silver' : '실버');
+        document.getElementById('profile-form-length').value = prefillItem ? extractLengthNumber(getProfileLength(prefillItem)) : '';
+        document.getElementById('profile-form-color').value = prefillItem ? getProfileColor(prefillItem) : '';
         document.getElementById('profile-form-qty').value = 100;
         document.getElementById('profile-form-minqty').value = prefillItem ? (prefillItem.minQty ?? 0) : 0;
 
@@ -2583,6 +2794,7 @@ function openProfileModal(mode, profileIdx = null, overrideBlockId = null, prefi
             document.getElementById('profile-form-selected-code').value = '';
             document.getElementById('profile-form-code').value = '';
             document.getElementById('profile-form-name').value = prefillItem ? (prefillItem.name || '') : '';
+            setProfileSpecFieldsLocked(true);
             renderProfileSelectedPreview(null);
         }
     }
@@ -2611,8 +2823,8 @@ function saveProfileModal() {
         showToast(currentLang === 'en' ? 'Length must be a valid number in mm.' : '길이는 숫자(mm)만 입력해주세요.');
         return;
     }
-    const length = formatLengthMmValue(rawLen);
-    const color = document.getElementById('profile-form-color').value.trim() || '-';
+    let length = formatLengthMmValue(rawLen);
+    let color = document.getElementById('profile-form-color').value.trim() || '-';
     const qty = Math.max(0, parseInt(document.getElementById('profile-form-qty').value) || 0);
     let minQty = Math.max(0, parseInt(document.getElementById('profile-form-minqty').value) || 0);
 
@@ -2634,6 +2846,9 @@ function saveProfileModal() {
         name = resolvedCatalog.partNameEng || resolvedCatalog.oztechName || resolvedCatalog.code;
         oztechName = resolvedCatalog.oztechName || '';
         itemType = resolvedCatalog.type || 'PROFILE';
+        const catalogLen = extractLengthNumber(resolvedCatalog.length);
+        if (catalogLen) length = formatLengthMmValue(catalogLen);
+        if (resolvedCatalog.colour) color = resolvedCatalog.colour;
     } else {
         const existingItem = (profileModalMode === 'edit' && origData && editingProfileIndex !== null)
             ? origData.profiles[editingProfileIndex]
@@ -3639,10 +3854,12 @@ function invAdjustQty(blockId, profileIdx, delta) {
     }
 }
 
-function openMoveProfileModal(blockId, profileIdx) {
+function openMoveProfileModal(blockId, profileIdx, preferredTargetBlockId = null, preferredTargetTier = null) {
     const sourceData = factoryBlocksData.find(b => b.id === blockId);
     if (!sourceData || !sourceData.profiles[profileIdx]) return;
     const item = sourceData.profiles[profileIdx];
+    const catItem = getCatalogItemByCode(item.code);
+    const displayName = (catItem ? formatProfileEnglishName(catItem) : '') || item.name;
 
     moveSource = { blockId, profileIdx };
     const tierLabel = sourceData.tiers > 1 ? formatTier(item.tier || 1) : (currentLang === 'en' ? formatTier(item.tier || 1) : (item.layer || '1단'));
@@ -3650,7 +3867,7 @@ function openMoveProfileModal(blockId, profileIdx) {
     document.getElementById('move-item-source').textContent = currentLang === 'en'
         ? `Current: ${sourceData.codeLabel} · ${tierLabel} (${item.qty} EA)`
         : `현재 위치: ${sourceData.codeLabel} · ${tierLabel} (보유 ${item.qty} EA)`;
-    document.getElementById('move-item-name').textContent = item.name;
+    document.getElementById('move-item-name').textContent = displayName;
     document.getElementById('move-qty').value = item.qty;
     document.getElementById('move-qty').max = item.qty;
 
@@ -3663,10 +3880,19 @@ function openMoveProfileModal(blockId, profileIdx) {
         rackSelect.appendChild(opt);
     });
     const otherRack = factoryBlocksData.find(b => b.id !== blockId);
-    rackSelect.value = otherRack ? otherRack.id : blockId;
-    onMoveTargetRackChange();
+    rackSelect.value = (preferredTargetBlockId && factoryBlocksData.some(b => b.id === preferredTargetBlockId))
+        ? preferredTargetBlockId
+        : (otherRack ? otherRack.id : blockId);
+    onMoveTargetRackChange(preferredTargetTier);
 
     document.getElementById('move-profile-modal').classList.remove('hidden');
+    setTimeout(() => {
+        const qtyInput = document.getElementById('move-qty');
+        if (qtyInput) {
+            qtyInput.focus();
+            qtyInput.select();
+        }
+    }, 30);
 }
 
 function closeMoveProfileModal() {
@@ -3674,7 +3900,7 @@ function closeMoveProfileModal() {
     moveSource = null;
 }
 
-function onMoveTargetRackChange() {
+function onMoveTargetRackChange(preferredTier = null) {
     const rackId = document.getElementById('move-target-rack').value;
     const rackData = factoryBlocksData.find(b => b.id === rackId);
     const tierSelect = document.getElementById('move-target-tier');
@@ -3685,6 +3911,10 @@ function onMoveTargetRackChange() {
         opt.value = t;
         opt.textContent = formatTier(t);
         tierSelect.appendChild(opt);
+    }
+    if (preferredTier !== null && preferredTier !== undefined) {
+        const clamped = Math.min(tierCount, Math.max(1, parseInt(preferredTier) || 1));
+        tierSelect.value = clamped;
     }
 }
 
@@ -3729,6 +3959,9 @@ function confirmMoveProfile() {
         existingTarget.qty = (Number(existingTarget.qty) || 0) + moveQty;
     } else {
         const cloned = JSON.parse(JSON.stringify(item));
+        if (moveQty < currentQty) {
+            delete cloned._invId;
+        }
         cloned.tier = targetTier;
         cloned.layer = formatTier(targetTier);
         cloned.qty = moveQty;
@@ -3747,10 +3980,14 @@ function confirmMoveProfile() {
     saveFactoryData();
     closeMoveProfileModal();
 
-    const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
-    if (activeBlock) renderSidePanel(activeBlock, selectedTier);
-    previewProfileOn3D(movedKey, targetData.id, (targetData.tiers || 1) > 1 ? targetTier : null);
-    renderInventoryPage();
+    if (currentPage === 'map') {
+        selectBlock(targetData.id, false, (targetData.tiers || 1) > 1 ? targetTier : null);
+    } else {
+        const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+        if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+        previewProfileOn3D(movedKey, targetData.id, (targetData.tiers || 1) > 1 ? targetTier : null);
+        renderInventoryPage();
+    }
     const movedLabel = item.code || item.name;
     showToast(currentLang === 'en'
         ? `Moved ${moveQty.toLocaleString()} EA of [${movedLabel}] to ${targetData.codeLabel} (${formatTier(targetTier)}).`
@@ -4976,8 +5213,22 @@ async function initSupabaseConnection() {
             if (legacyBlocks && legacyBlocks.length > 0) {
                 factoryBlocksData = legacyBlocks;
             }
+            migrateCatalogCodesToMeterRule({ persistLocal: true });
             const ok = await pushDataToSupabase({ silent: true });
             if (!ok) return false;
+        }
+
+        const migRes = migrateCatalogCodesToMeterRule({ persistLocal: true });
+        if (migRes.migratedCount > 0 || migRes.rackUpdatedCount > 0) {
+            const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+            if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+            if (currentPage === 'inventory') renderInventoryPage();
+            const catModal = document.getElementById('catalog-modal');
+            if (catModal && !catModal.classList.contains('hidden')) renderCatalogTable();
+            await pushDataToSupabase({ silent: true, reportErrors: true });
+            showToast(currentLang === 'en'
+                ? `Updated ${migRes.migratedCount} code(s) to length/1000 format.`
+                : `기존 코드 ${migRes.migratedCount}건을 길이(/1000) 규칙으로 업데이트했습니다.`);
         }
 
         subscribeSupabaseRealtime();
@@ -5004,7 +5255,7 @@ function scheduleCloudPush() {
     }, 800);
 }
 
-async function pushDataToSupabase({ silent = false } = {}) {
+async function pushDataToSupabase({ silent = false, reportErrors = !silent } = {}) {
     if (!isSupabaseConfigured()) {
         if (!silent) openSupabaseModal();
         return false;
@@ -5078,11 +5329,9 @@ async function pushDataToSupabase({ silent = false } = {}) {
                         .from('catalog_items')
                         .upsert(legacyCatRows, { onConflict: 'code' });
                     if (legacyErr) throw legacyErr;
-                    if (!silent) {
-                        showToast(currentLang === 'en'
-                            ? 'Supabase catalog_items needs colour/length columns. Run DB Setup -> Copy SQL in Supabase.'
-                            : 'Supabase catalog_items에 colour/length 컬럼 추가가 필요합니다. DB Setup -> Copy SQL을 실행해주세요.');
-                    }
+                    showToast(currentLang === 'en'
+                        ? 'Supabase catalog_items needs colour/length columns! Run DB Setup -> Copy SQL in Supabase SQL Editor.'
+                        : 'Supabase catalog_items 테이블에 colour/length 컬럼이 없습니다! DB Setup -> Copy SQL을 Supabase에서 실행해주세요.');
                 } else {
                     throw catUpsertErr;
                 }
@@ -5124,7 +5373,7 @@ async function pushDataToSupabase({ silent = false } = {}) {
     } catch (err) {
         console.error('Supabase push error:', err);
         setCloudStatus('error', err.message || 'Save failed');
-        if (!silent) {
+        if (reportErrors) {
             showToast((currentLang === 'en' ? 'Supabase save failed: ' : '서버 저장 실패: ') + (err.message || 'Error'));
         }
         return false;
@@ -5159,6 +5408,13 @@ async function pullDataFromSupabase({ silent = false } = {}) {
 
         const assembled = assembleBlocksFromNormalizedTables(rackRows, profileRows, invRows);
         applyRemoteBlocksFromCloud(assembled, new Date().toISOString(), false);
+        const migRes = migrateCatalogCodesToMeterRule({ persistLocal: true });
+        if (migRes.migratedCount > 0 || migRes.rackUpdatedCount > 0) {
+            const activeBlock = factoryBlocksData.find(b => b.id === selectedBlockId);
+            if (activeBlock) renderSidePanel(activeBlock, selectedTier);
+            if (currentPage === 'inventory') renderInventoryPage();
+            await pushDataToSupabase({ silent: true, reportErrors: true });
+        }
         setCloudStatus('connected', currentLang === 'en' ? 'Synced from Supabase' : '서버 데이터 동기화 완료');
         if (!silent) {
             showToast(currentLang === 'en' ? 'Loaded latest layout & inventory from Supabase!' : 'Supabase에서 최신 레이아웃과 재고를 불러왔습니다!');
@@ -5454,10 +5710,19 @@ function normalizeColourPrefix2(colour) {
     return trimmed.replace(/[^A-Z0-9]/g, '').slice(0, 2);
 }
 
-function normalizeLengthPrefix3(length) {
+function normalizeLegacyLengthPrefix3(length) {
     const digits = String(length ?? '').replace(/[^0-9]/g, '');
     if (!digits) return '';
     return digits.length >= 3 ? digits.slice(0, 3) : digits.padStart(3, '0');
+}
+
+function formatCatalogLengthMetersCode(length) {
+    const cleaned = String(length ?? '').replace(/,/g, '').trim();
+    if (!cleaned) return '';
+    const num = parseFloat(cleaned);
+    if (isNaN(num) || num < 0) return '';
+    if (num === 0) return '0';
+    return String(Number((num / 1000).toFixed(6)));
 }
 
 function generateCatalogCode({ product, type, madeIn, active, no, length, colour }) {
@@ -5469,10 +5734,94 @@ function generateCatalogCode({ product, type, madeIn, active, no, length, colour
     const noStr = (!isNaN(noNum) && noNum > 0) ? String(noNum) : '';
     if (!prod2 || prod2.length < 2 || !country2 || country2.length < 2 || !noStr) return '';
     const baseCode = `${prod2}-${type1}${country2}-${active1}${noStr}`;
-    const len3 = normalizeLengthPrefix3(length);
+    const lenCode = formatCatalogLengthMetersCode(length);
     const col2 = normalizeColourPrefix2(colour);
-    const variantSuffix = `${len3}${col2}`;
+    const variantSuffix = `${lenCode}${col2}`;
     return variantSuffix ? `${baseCode}-${variantSuffix}` : baseCode;
+}
+
+function migrateCatalogCodesToMeterRule({ persistLocal = true } = {}) {
+    if (!Array.isArray(masterCatalogData) || masterCatalogData.length === 0) {
+        return { migratedCount: 0, rackUpdatedCount: 0 };
+    }
+    const usedUpperCodes = new Set(masterCatalogData.map(it => String(it.code || '').trim().toUpperCase()).filter(Boolean));
+    const renameMap = new Map();
+    let migratedCount = 0;
+
+    masterCatalogData.forEach(it => {
+        if (!it || !it.code || !it.length) return;
+        const legacyLen3 = normalizeLegacyLengthPrefix3(it.length);
+        const meterLen = formatCatalogLengthMetersCode(it.length);
+        if (!legacyLen3 || !meterLen || legacyLen3 === meterLen) return;
+
+        const col2 = normalizeColourPrefix2(it.colour);
+        const legacySuffix = `-${legacyLen3}${col2}`;
+        const newSuffix = `-${meterLen}${col2}`;
+        const curCode = String(it.code).trim();
+        if (!curCode.toUpperCase().endsWith(legacySuffix.toUpperCase())) return;
+
+        const newCode = curCode.slice(0, curCode.length - legacySuffix.length) + newSuffix;
+        const oldUpper = curCode.toUpperCase();
+        const newUpper = newCode.toUpperCase();
+        if (oldUpper === newUpper || usedUpperCodes.has(newUpper)) return;
+
+        usedUpperCodes.delete(oldUpper);
+        usedUpperCodes.add(newUpper);
+        it.code = newCode;
+        renameMap.set(oldUpper, newCode);
+        migratedCount++;
+    });
+
+    let rackUpdatedCount = 0;
+    const catalogByUpper = new Map(masterCatalogData.map(it => [String(it.code || '').trim().toUpperCase(), it]));
+    (factoryBlocksData || []).forEach(block => {
+        let blockChanged = false;
+        (block.profiles || []).forEach(p => {
+            const pUpper = String(p.code || '').trim().toUpperCase();
+            if (!pUpper) return;
+            if (renameMap.has(pUpper)) {
+                p.code = renameMap.get(pUpper);
+                blockChanged = true;
+                rackUpdatedCount++;
+                return;
+            }
+            const lenNum = extractLengthNumber(getProfileLength(p));
+            const colRaw = getProfileColor(p);
+            const legacyLen3 = normalizeLegacyLengthPrefix3(lenNum);
+            const meterLen = formatCatalogLengthMetersCode(lenNum);
+            const col2 = normalizeColourPrefix2(colRaw === '-' ? '' : colRaw);
+            if (legacyLen3 && meterLen && legacyLen3 !== meterLen) {
+                const legacySuffix = `-${legacyLen3}${col2}`;
+                const newSuffix = `-${meterLen}${col2}`;
+                if (pUpper.endsWith(legacySuffix.toUpperCase())) {
+                    const candidate = p.code.slice(0, p.code.length - legacySuffix.length) + newSuffix;
+                    if (catalogByUpper.has(candidate.toUpperCase())) {
+                        p.code = catalogByUpper.get(candidate.toUpperCase()).code;
+                        blockChanged = true;
+                        rackUpdatedCount++;
+                    }
+                }
+            }
+        });
+        if (blockChanged) recalculateBlockStatus(block);
+    });
+
+    if (migratedCount > 0 && persistLocal) {
+        saveMasterCatalog(false);
+    }
+    if (rackUpdatedCount > 0 && persistLocal) {
+        try {
+            currentSourceHash = computeDataHash(factoryBlocksData);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                revision: DEFAULT_DATA_REVISION,
+                sourceHash: currentSourceHash,
+                dirty: true,
+                blocks: factoryBlocksData
+            }));
+        } catch (_) {}
+    }
+
+    return { migratedCount, rackUpdatedCount };
 }
 
 function updateCatalogAutoCodePreview() {
@@ -5952,7 +6301,7 @@ function renderCatalogTable() {
             <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.manufacture || '-')}</td>
             <td class="py-2 px-2 text-slate-100 font-semibold">${escapeHtml(it.partNameEng)}</td>
             <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.oztechName || '-')}</td>
-            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${escapeHtml(it.colour || '-')}</td>
+            <td class="py-2 px-2 text-amber-200 whitespace-nowrap">${escapeHtml(it.colour || '-')}</td>
             <td class="py-2 px-2 font-mono text-emerald-300 text-right whitespace-nowrap">${escapeHtml(it.length || '-')}</td>
             <td class="py-2 px-2 font-mono text-slate-300 whitespace-nowrap">${escapeHtml(it.moldNo || '-')}</td>
             <td class="py-2 px-2 font-mono text-amber-200 text-right whitespace-nowrap">${escapeHtml(it.weight || '-')}</td>
@@ -5978,7 +6327,7 @@ function exportCatalogToExcel() {
         return;
     }
     const items = masterCatalogData.filter(it => it.type === currentCatalogTab);
-    const rows = (items.length > 0 ? items : [normalizeCatalogItem({ no: 1, code: 'FA-PMA-A1-110MF', product: 'FAA', madeIn: 'MALAYSIA', type: currentCatalogTab, active: 'YES', partNameEng: 'Sample Item', colour: 'MF', length: '11000' })]).map(it => ({
+    const rows = (items.length > 0 ? items : [normalizeCatalogItem({ no: 1, code: 'FA-PMA-A1-11MF', product: 'FAA', madeIn: 'MALAYSIA', type: currentCatalogTab, active: 'YES', partNameEng: 'Sample Item', colour: 'MF', length: '11000' })]).map(it => ({
         'No.': it.no,
         'Code': it.code,
         'Product': it.product,
@@ -6033,6 +6382,12 @@ function findMatchingCatalogIndexForImport(itemObj, hasExplicitCode = true) {
     const byCode = masterCatalogData.findIndex(it => it.code.toUpperCase() === upperCode);
     if (byCode !== -1) return byCode;
 
+    // 엑셀에 Code가 명시되어 있는데 기존 DB에 해당 Code가 없다면,
+    // 같은 No.의 다른 길이/색상 품목(예: 61번 -11MF, -7WH, -7BL)을 덮어쓰지 않고 신규 행으로 추가한다.
+    if (hasExplicitCode) {
+        return -1;
+    }
+
     if (itemObj.product && itemObj.madeIn && itemObj.no) {
         const byIdentity = masterCatalogData.findIndex(it =>
             it.type === itemObj.type &&
@@ -6053,8 +6408,7 @@ function findMatchingCatalogIndexForImport(itemObj, hasExplicitCode = true) {
             it.manufacture.toUpperCase() === itemObj.manufacture.toUpperCase() &&
             it.colour.toUpperCase() === itemObj.colour.toUpperCase() &&
             it.length.toUpperCase() === itemObj.length.toUpperCase() &&
-            it.moldNo.toUpperCase() === itemObj.moldNo.toUpperCase() &&
-            (!hasExplicitCode || Number(it.no) === Number(itemObj.no))
+            it.moldNo.toUpperCase() === itemObj.moldNo.toUpperCase()
         );
         if (bySpec !== -1) return bySpec;
     }
@@ -6126,7 +6480,7 @@ function handleCatalogExcelImport(event) {
                     clearTimeout(cloudPushTimer);
                     cloudPushTimer = null;
                 }
-                pushDataToSupabase({ silent: true });
+                pushDataToSupabase({ silent: true, reportErrors: true });
             }
             resetCatalogForm();
             renderCatalogTable();
@@ -6169,6 +6523,7 @@ document.addEventListener('keydown', (e) => {
 window.onload = async function() {
     capturePristineHtmlSnapshot();
     await loadInitialDataFromJsonOrStorage();
+    migrateCatalogCodesToMeterRule({ persistLocal: true });
     await initSupabaseConnection();
     init3D();
     applyLanguage();

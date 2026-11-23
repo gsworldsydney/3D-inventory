@@ -18,7 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS v2 SDK (실시간 클라우드 DB 동기화) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
 
@@ -285,7 +285,7 @@
             </div>
 
             <!-- 프로파일 리스트 컨테이너 -->
-            <div id="profile-list-container" class="flex-1 overflow-y-auto p-5 space-y-4">
+            <div id="profile-list-container" class="flex-1 overflow-y-auto p-4 space-y-3">
                 <!-- 랙 단(Level) 선택 및 단 추가/삭제 & 품목 추가 컨트롤 바 -->
                 <div id="rack-tier-selector" class="hidden bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2.5">
                     <div class="flex items-center justify-between">
@@ -321,7 +321,7 @@
                 </div>
 
                 <!-- 동적 프로파일 카드가 여기에 렌더링됩니다 -->
-                <div id="profile-cards" class="space-y-2 hidden"></div>
+                <div id="profile-cards" class="space-y-1.5 hidden"></div>
             </div>
 
             <!-- 하단 요약 푸터 -->
@@ -619,13 +619,13 @@
                     <div>
                         <label class="text-slate-400 block mb-1" data-i18n="modal_prof_length">Length (mm)</label>
                         <div class="relative">
-                            <input type="number" id="profile-form-length" min="0" step="any" inputmode="decimal" placeholder="e.g. 6000" class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-3 pr-10 py-2 text-white font-mono focus:border-sky-400 focus:outline-none">
+                            <input type="number" id="profile-form-length" min="0" step="any" inputmode="decimal" placeholder="Auto-filled from list" readonly tabindex="-1" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-3 pr-10 py-2 text-slate-300 font-mono cursor-not-allowed focus:outline-none">
                             <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-[11px] pointer-events-none">mm</span>
                         </div>
                     </div>
                     <div>
                         <label class="text-slate-400 block mb-1" data-i18n="modal_prof_color">Color</label>
-                        <input type="text" id="profile-form-color" placeholder="e.g. Silver / Black" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:border-sky-400 focus:outline-none">
+                        <input type="text" id="profile-form-color" placeholder="Auto-filled from list" readonly tabindex="-1" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-3 py-2 text-slate-300 cursor-not-allowed focus:outline-none">
                     </div>
                 </div>
                 <input type="hidden" id="profile-form-minqty" value="0">
@@ -725,7 +725,7 @@
     </div>
 
     <!-- 모달 3: 확인(Confirm) 모달 -->
-    <div id="confirm-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden text-xs">
             <div class="p-5">
                 <h3 id="confirm-modal-title" class="text-base font-bold text-white mb-2">Confirm</h3>
@@ -835,7 +835,7 @@
 
     <!-- 모달 8: 회사 마스터 물품 리스트 관리 모달 (Profile List / Part List) -->
     <div id="catalog-modal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[96vw] xl:max-w-7xl h-[90vh] shadow-2xl overflow-hidden flex flex-col text-xs">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[96vw] 2xl:max-w-[1520px] h-[90vh] shadow-2xl overflow-hidden flex flex-col text-xs">
             <!-- 모달 헤더 -->
             <div class="px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-900 shrink-0">
                 <div class="flex items-center gap-3 flex-wrap">
@@ -907,7 +907,7 @@
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">Code (Auto)</label>
-                        <input type="text" id="cat-form-code" readonly placeholder="FA-PMA-A1-110MF" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
+                        <input type="text" id="cat-form-code" readonly placeholder="FA-PMA-A1-11MF" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sky-300 font-mono font-bold cursor-not-allowed focus:outline-none">
                     </div>
                     <div class="lg:col-span-1">
                         <label class="text-[10px] text-slate-400 block mb-0.5">Product *</label>
@@ -994,7 +994,7 @@
                             <th onclick="setCatalogSort('partNameEng')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[200px] cursor-pointer hover:text-white">PART NAME(Eng) <span id="cat-sort-ind-partNameEng" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('oztechName')" class="py-2 px-2 font-semibold whitespace-nowrap min-w-[140px] cursor-pointer hover:text-white">OZTECH NAME <span id="cat-sort-ind-oztechName" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('colour')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">Colour <span id="cat-sort-ind-colour" class="text-sky-400 ml-0.5"></span></th>
-                            <th onclick="setCatalogSort('length')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">length(M) <span id="cat-sort-ind-length" class="text-sky-400 ml-0.5"></span></th>
+                            <th onclick="setCatalogSort('length')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">Length (mm) <span id="cat-sort-ind-length" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('moldNo')" class="py-2 px-2 font-semibold whitespace-nowrap cursor-pointer hover:text-white">MOLD NO. <span id="cat-sort-ind-moldNo" class="text-sky-400 ml-0.5"></span></th>
                             <th onclick="setCatalogSort('weight')" class="py-2 px-2 font-semibold whitespace-nowrap text-right cursor-pointer hover:text-white">WEIGHT (KG/M2) <span id="cat-sort-ind-weight" class="text-sky-400 ml-0.5"></span></th>
                             <th class="py-2 px-2 font-semibold whitespace-nowrap text-center">Img</th>
@@ -1014,11 +1014,11 @@
     </div>
 
     <!-- 알림 메시지 모달 (alert 대체) -->
-    <div id="toast-msg" class="fixed bottom-6 right-6 bg-slate-800 border border-sky-500/50 text-white px-4 py-3 rounded-xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3 text-sm">
+    <div id="toast-msg" class="fixed bottom-6 right-6 bg-slate-800 border border-sky-500/50 text-white px-4 py-3 rounded-xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-[70] flex items-center gap-3 text-sm">
         <i class="fa-solid fa-circle-info text-sky-400"></i>
         <span id="toast-text">Message</span>
     </div>
 
-    <script src="app.js?v=21"></script>
+    <script src="app.js?v=30"></script>
 </body>
 </html>
